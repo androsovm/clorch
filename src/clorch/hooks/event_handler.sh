@@ -120,7 +120,7 @@ case "$EVENT" in
 
         jq -n \
             --arg sid "$SESSION_ID" \
-            --arg status "WORKING" \
+            --arg status "IDLE" \
             --arg cwd "$CWD" \
             --arg started_at "$NOW" \
             --arg project_name "$PROJECT_NAME" \

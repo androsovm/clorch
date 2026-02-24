@@ -68,7 +68,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     if (.cwd == null or .cwd == "") and $cwd != "" then .cwd = $cwd else . end |
     if (.project_name == null or .project_name == "") and $cwd != "" then .project_name = ($cwd | split("/") | last) else . end |
     if .started_at == null or .started_at == "" then .started_at = $now else . end |
-    if .status == null or .status == "" then .status = "WORKING" else . end |
+    if .status == null or .status == "" then .status = "IDLE" else . end |
     if .tool_count == null then .tool_count = 0 else . end |
     if .error_count == null then .error_count = 0 else . end |
     if .activity_history == null then .activity_history = [0,0,0,0,0,0,0,0,0,0] else . end
