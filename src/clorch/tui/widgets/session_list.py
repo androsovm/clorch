@@ -107,6 +107,10 @@ class SessionRow(ListItem):
     _COL_UPTIME = 8     # "1h 23m" right-aligned
     _COL_SPARK = 10     # sparkline chars
 
+    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(22)
+    # + status(1+8) + tool(1+12) + tcnt(4) + ecnt(3) + uptime(8) + sep(2) + sparkline(10)
+    _FIXED_PREFIX_WIDTH = 77
+
     def _render_row(self) -> Text:
         """Render the row as Rich Text with fixed-width columns."""
         text = Text()
@@ -172,14 +176,24 @@ class SessionRow(ListItem):
         sparkline = self._render_sparkline(agent.activity_history)
         text.append_text(sparkline)
 
-        # Col 10: Notification message (remaining space)
-        msg = agent.notification_message or ""
-        if msg:
-            trunc = msg[:60] if len(msg) > 60 else msg
-            text.append(f"  {trunc}", style="dim italic")
+        # Col 10: Notification message + action hints (width-aware)
+        content_width = (getattr(self.size, "width", 120) or 120) - 2  # padding: 0 1
+        remaining = content_width - self._FIXED_PREFIX_WIDTH
 
-        # Inline action hints
+        # Determine action hint width: "[y][n]" = 6, "[->]" = 4, plus 2 separator each
+        hint_width = 0
         if self._action:
+            hint_width = 8 if self._action.actionable else 6  # 2 sep + content
+
+        msg = agent.notification_message or ""
+        if remaining > hint_width and msg:
+            msg_budget = remaining - hint_width - 2  # 2 for "  " separator before msg
+            if msg_budget > 0:
+                if len(msg) > msg_budget:
+                    msg = msg[: max(msg_budget - 1, 0)] + "\u2026"
+                text.append(f"  {msg}", style="dim italic")
+
+        if self._action and remaining >= hint_width:
             text.append("  ", style="dim")
             if self._action.actionable:
                 text.append("[y]", style=f"bold {GREEN}")
