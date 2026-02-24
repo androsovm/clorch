@@ -490,45 +490,46 @@ class OrchestratorApp(App):
                 self.query_one(detail_id, AgentDetail).show_agent(agent)
 
     def _jump_to_session(self, agent: AgentState) -> None:
-        """Jump to an agent's tmux window or iTerm tab."""
+        """Jump to the terminal running the agent's Claude process.
+
+        Two paths depending on how the agent is running:
+        - **tmux**: ``select-window`` + ``select-pane`` (CC mode
+          auto-switches the iTerm tab), then bring iTerm to front.
+        - **plain iTerm**: PID → tty → iTerm tab activation.
+
+        Dead processes are cleaned up inline so the user never lands
+        on a stale tab.
+        """
         from clorch.tmux.navigator import (
-            map_agent_to_window, jump_to_iterm_tab, jump_to_tmux_iterm_tab,
+            jump_to_iterm_tab, select_tmux_pane, bring_iterm_to_front,
+            pid_alive,
         )
-        from clorch.tmux.session import TmuxSession
 
         name = agent.project_name or agent.session_id[:12]
 
-        tmux = TmuxSession()
-        has_tmux = tmux.is_available() and tmux.exists()
+        # Dead process check — remove stale state file immediately
+        if agent.pid and not pid_alive(agent.pid):
+            state_file = self._manager._state_dir / f"{agent.session_id}.json"
+            state_file.unlink(missing_ok=True)
+            self.notify(f"{name}: process dead, removed", severity="warning")
+            return
 
-        # Agent explicitly in tmux → tmux path first
-        if agent.tmux_window and has_tmux:
-            window = map_agent_to_window(agent, tmux)
-            if window:
-                if jump_to_tmux_iterm_tab(tmux, window):
-                    self.notify(f"Jumped to {name}")
-                    return
-                tmux.select_window(window)
+        # tmux session: select-window + select-pane (CC mode follows)
+        if agent.tmux_window:
+            if select_tmux_pane(agent):
+                bring_iterm_to_front()
                 self.notify(f"Jumped to {name}")
                 return
 
-        # Plain iTerm tab matching (cwd/name)
+        # Plain iTerm: PID → tty → tab
         if jump_to_iterm_tab(agent):
             self.notify(f"Jumped to {name}")
             return
 
-        # Fallback: try tmux matching by cwd/name even without explicit tmux_window
-        if has_tmux and not agent.tmux_window:
-            window = map_agent_to_window(agent, tmux)
-            if window:
-                if jump_to_tmux_iterm_tab(tmux, window):
-                    self.notify(f"Jumped to {name}")
-                    return
-                tmux.select_window(window)
-                self.notify(f"Jumped to {name}")
-                return
-
-        self.notify(f"No window/tab found for {name}", severity="warning")
+        if not agent.pid:
+            self.notify(f"{name}: no PID — restart session", severity="warning")
+        else:
+            self.notify(f"No tab found for {name}", severity="warning")
 
     def _apply_tmux_statusbar(self) -> None:
         """Apply clorch status bar options to an existing tmux session."""

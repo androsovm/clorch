@@ -90,11 +90,14 @@ class StateManager:
     # ------------------------------------------------------------------
 
     def cleanup_stale(self, max_age_seconds: int = 3600) -> int:
-        """Remove state files for dead processes.
+        """Remove state files for dead processes and duplicates.
 
         Detection strategy:
         1. If a ``pid`` is stored, check ``kill(pid, 0)`` — remove if dead.
         2. If no ``pid``, fall back to *max_age_seconds* on *last_event_time*.
+        3. Deduplicate by PID: when multiple state files share the same
+           PID, keep the one with the highest ``tool_count`` (most active)
+           and remove the rest.
 
         Returns the number of files removed.
         """
@@ -103,6 +106,10 @@ class StateManager:
 
         now = time.time()
         removed = 0
+
+        # First pass: collect all agents, remove dead/stale ones.
+        # Track live agents by PID for dedup in second pass.
+        pid_map: dict[int, list[tuple[Path, AgentState]]] = {}
 
         for path in self._state_dir.glob("*.json"):
             try:
@@ -143,6 +150,25 @@ class StateManager:
                     path.unlink()
                     removed += 1
                     log.info("Removed stale state file %s (pid=%s)", path.name, agent.pid)
+                except OSError as exc:
+                    log.warning("Could not remove %s: %s", path, exc)
+            elif agent.pid is not None:
+                pid_map.setdefault(agent.pid, []).append((path, agent))
+
+        # Second pass: deduplicate by PID — keep the most active session.
+        for pid, entries in pid_map.items():
+            if len(entries) <= 1:
+                continue
+            # Keep the entry with the highest tool_count
+            entries.sort(key=lambda e: e[1].tool_count, reverse=True)
+            for path, agent in entries[1:]:
+                try:
+                    path.unlink()
+                    removed += 1
+                    log.info(
+                        "Removed duplicate state file %s (pid=%d, tool_count=%d)",
+                        path.name, pid, agent.tool_count,
+                    )
                 except OSError as exc:
                     log.warning("Could not remove %s: %s", path, exc)
 

@@ -92,44 +92,73 @@ def jump_to_tmux_iterm_tab(tmux: TmuxSession, window: str) -> bool:
 def jump_to_iterm_tab(agent: AgentState) -> bool:
     """Switch iTerm2 to the tab running the agent's session.
 
-    Strategy order (most precise first):
-    1. PID → tty → iTerm tab (unique match even for same-cwd sessions).
-    2. cwd → tty → iTerm tab (fallback when PID is unavailable).
-    3. project_name in tab title (last resort).
+    Uses PID → tty → iTerm tab for precise matching.  Previous cwd and
+    name-based fallbacks were removed because they match the wrong tab
+    when multiple sessions share the same project directory.
 
     Returns ``True`` on success, ``False`` if no matching tab was found.
     """
+    if not agent.pid:
+        return False
+
     tty_map = _iterm_get_tty_map()
+    if not tty_map:
+        return False
 
-    # Strategy 1: match by PID → tty (most precise)
-    if agent.pid and tty_map:
-        agent_tty = _tty_from_pid(agent.pid)
-        if agent_tty and agent_tty in tty_map:
-            if _iterm_activate_tab(tty_map[agent_tty]):
-                return True
-
-    # Strategy 2: match by cwd via tty → lsof
-    if agent.cwd and tty_map:
-        target_cwd = _normalise_path(agent.cwd)
-        for tty, tab_ref in tty_map.items():
-            cwd = _cwd_from_tty(tty)
-            if cwd and _normalise_path(cwd) == target_cwd:
-                if _iterm_activate_tab(tab_ref):
-                    return True
-
-    # Strategy 3: match by project name in tab title
-    if agent.project_name:
-        if _iterm_activate_by_name(agent.project_name):
-            return True
+    agent_tty = _tty_from_pid(agent.pid)
+    if agent_tty and agent_tty in tty_map:
+        return _iterm_activate_tab(tty_map[agent_tty])
 
     return False
 
 
+def select_tmux_pane(agent: AgentState) -> bool:
+    """Focus the tmux window + pane for this agent.
+
+    In iTerm CC mode, ``select-window`` causes iTerm to switch to the
+    corresponding tab automatically.  Returns ``True`` on success.
+    """
+    if not agent.tmux_window:
+        return False
+    tmux = TmuxSession()
+    if not (tmux.is_available() and tmux.exists()):
+        return False
+    target = f"{tmux.session}:{agent.tmux_window}"
+    result = tmux.run_command("select-window", "-t", target, check=False)
+    if result.returncode != 0:
+        return False
+    if agent.tmux_pane:
+        tmux.run_command(
+            "select-pane", "-t", f"{target}.{agent.tmux_pane}", check=False,
+        )
+    return True
+
+
+def bring_iterm_to_front() -> None:
+    """Activate iTerm2 and bring it to the foreground."""
+    _run_applescript(
+        'tell application "iTerm2" to activate\n'
+        'tell application "System Events" to tell process "iTerm2" '
+        'to set frontmost to true'
+    )
+
+
+def pid_alive(pid: int) -> bool:
+    """Check if a process is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # alive, just can't signal
+
+
 def _iterm_get_tty_map() -> dict[str, str]:
-    """Return ``{tty: "window_idx,tab_idx"}`` for every iTerm session.
+    """Return ``{tty: "window_idx,tab_idx,session_idx"}`` for every iTerm session.
 
     The value is a string that ``_iterm_activate_tab`` can parse to
-    select the right window and tab via AppleScript.
+    select the right window, tab, **and split pane** via AppleScript.
     """
     script = '''
         tell application "iTerm2"
@@ -140,10 +169,12 @@ def _iterm_get_tty_map() -> dict[str, str]:
                 set tIdx to 0
                 repeat with t in tabs of w
                     set tIdx to tIdx + 1
+                    set sIdx to 0
                     repeat with s in sessions of t
+                        set sIdx to sIdx + 1
                         try
                             set sessionTty to tty of s
-                            set output to output & sessionTty & "=" & wIdx & "," & tIdx & linefeed
+                            set output to output & sessionTty & "=" & wIdx & "," & tIdx & "," & sIdx & linefeed
                         end try
                     end repeat
                 end repeat
@@ -215,21 +246,41 @@ def _cwd_from_tty(tty: str) -> str | None:
 
 
 def _iterm_activate_tab(tab_ref: str) -> bool:
-    """Activate the iTerm tab identified by ``"window_idx,tab_idx"``."""
+    """Activate the iTerm tab and session identified by ``"window_idx,tab_idx[,session_idx]"``.
+
+    When *session_idx* is provided the specific split pane is selected,
+    otherwise only the tab is activated.
+    """
     parts = tab_ref.split(",")
-    if len(parts) != 2:
+    if len(parts) < 2:
         return False
-    w_idx, t_idx = parts
-    script = f'''
-        tell application "iTerm2"
-            set w to item {w_idx} of windows
-            set t to item {t_idx} of tabs of w
-            select t
-            tell w to select
-            tell application "System Events" to tell process "iTerm2" to set frontmost to true
-            return "found"
-        end tell
-    '''
+    w_idx, t_idx = parts[0], parts[1]
+    s_idx = parts[2] if len(parts) >= 3 else None
+
+    if s_idx:
+        script = f'''
+            tell application "iTerm2"
+                set w to item {w_idx} of windows
+                set t to item {t_idx} of tabs of w
+                set s to item {s_idx} of sessions of t
+                select s
+                select t
+                tell w to select
+                tell application "System Events" to tell process "iTerm2" to set frontmost to true
+                return "found"
+            end tell
+        '''
+    else:
+        script = f'''
+            tell application "iTerm2"
+                set w to item {w_idx} of windows
+                set t to item {t_idx} of tabs of w
+                select t
+                tell w to select
+                tell application "System Events" to tell process "iTerm2" to set frontmost to true
+                return "found"
+            end tell
+        '''
     return _run_applescript(script) == "found"
 
 
@@ -314,30 +365,37 @@ def jump_to_next_attention(session_name: str = "claude") -> bool:
         return False
 
     # Try to pick a window that is *not* the current one (cycle behaviour).
+    chosen_agent: AgentState | None = None
     target: str | None = None
     past_current = False
-    for _agent, win in candidates:
+    for agent, win in candidates:
         if win == current_window:
             past_current = True
             continue
         if past_current or current_window is None:
-            target = win
+            chosen_agent, target = agent, win
             break
 
     # Wrap-around: if we went past current without finding another, take
     # the first candidate that differs; otherwise just use the first one.
     if target is None:
-        for _agent, win in candidates:
+        for agent, win in candidates:
             if win != current_window:
-                target = win
+                chosen_agent, target = agent, win
                 break
 
     if target is None:
         # All attention agents map to the current window -- already there.
-        target = candidates[0][1]
+        chosen_agent, target = candidates[0]
 
     log.info("Jumping to window '%s'", target)
     tmux.select_window(target)
+
+    # Also select the specific pane so the right agent gets focus
+    if chosen_agent and chosen_agent.tmux_pane:
+        pane_target = f"{tmux.session}:{target}.{chosen_agent.tmux_pane}"
+        tmux.run_command("select-pane", "-t", pane_target, check=False)
+
     return True
 
 
