@@ -1,35 +1,36 @@
 # Clorch
 
-Orchestrator dashboard for multiple Claude Code sessions.
+Mission control for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions.
 
-Clorch listens to [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks), keeps a live view of every active agent, and lets you approve permissions or jump to the right session — all from one place. It is event-driven (no terminal scraping) and pairs naturally with tmux.
+![Clorch TUI](docs/clorch-screenshot.png)
 
-## Why
+You run 10 agents across iTerm tabs. One asks for permission, two are idle, and you can't remember which tab has the one that's stuck. You Cmd-Tab through terminals, lose focus, and waste minutes just *finding* the right session.
 
-When you run several Claude Code sessions at once, context switching kills productivity. Clorch gives you a single control plane: who is working, who needs attention, and where to jump next.
+Clorch fixes this. One dashboard shows every agent's status. Permission request pops up — press `y` without switching tabs. Need to jump to a session — press `Enter`. That's it.
 
 ## Features
 
-- **Real-time tracking** via Claude Code hooks (push model, no polling of terminals)
-- **TUI dashboard** with action queue, agent table, sparklines, and detail panel
-- **Approve / deny** permission requests directly from the dashboard (`y` / `n`)
-- **Jump** to any agent's tmux window or iTerm2 tab in one keystroke
-- **tmux status-bar widget** for at-a-glance agent counts
-- **macOS notifications** and terminal bell on attention events
-- **Batch approve** all pending permissions with `Y`
+- **Real-time tracking** — hooks push events, no terminal scraping or polling
+- **Approve / deny** permissions without leaving the dashboard (`y` / `n` / `Y` for all)
+- **Jump** to any agent's iTerm2 tab in one keystroke
+- **Action queue** — pending permissions are listed with hotkeys, newest first
+- **macOS notifications** and terminal bell when an agent needs attention
+- **tmux support** — status-bar widget, window splits, and navigation
 
 ## Quick Start
 
 ```bash
-# Install (editable, from source)
+# Install from source
 pip install -e .
 
-# Install hooks into ~/.claude/settings.json (requires jq)
+# Install hooks into Claude Code settings
 clorch init
 
 # Launch the dashboard
 clorch
 ```
+
+`clorch init` adds hooks to `~/.claude/settings.json` (backup is created automatically). From this point, every Claude Code session reports its state to Clorch.
 
 ## CLI
 
@@ -67,27 +68,21 @@ clorch --version    Print version
 | `Y` | Approve **all** pending permissions |
 | `Esc` | Cancel selection |
 
-### tmux Helpers
+### tmux (optional)
 
 | Key | Action |
 |-----|--------|
 | `N` | Create a new tmux window (prompts for name) |
-| `R` | Open iTerm tab attached to selected agent |
 | `S` / `V` | Split selected agent's window (horizontal / vertical) |
 | `X` | Kill selected agent's tmux window |
 
-## tmux Status Bar
-
-Add to `~/.tmux.conf`:
+If you use tmux, add a status-bar widget to `~/.tmux.conf`:
 
 ```bash
 set -g status-right '#(clorch tmux-widget)'
 set -g status-interval 2
-```
 
-Optionally bind `prefix + !` to jump to the next agent needing attention:
-
-```bash
+# Jump to the next agent needing attention
 bind-key ! run-shell "python -m clorch.tmux.navigator"
 ```
 
@@ -97,18 +92,18 @@ bind-key ! run-shell "python -m clorch.tmux.navigator"
 Claude Code hooks
   → event_handler.sh / notify_handler.sh
     → /tmp/clorch/state/<session_id>.json
-      → Dashboard polls every 500 ms
+      → Dashboard reads state every 500 ms
       → macOS notification + bell on attention events
 ```
 
-Hooks are installed into `~/.claude/settings.json` and call shell scripts that update per-session JSON state files. The TUI reads those files on a timer. A backup of your settings is created automatically on `init`.
+Clorch hooks into [Claude Code's hook system](https://docs.anthropic.com/en/docs/claude-code/hooks). Each Claude Code session triggers shell scripts that write a JSON state file. The TUI reads those files on a timer. No terminal scraping, no ptrace, no API — just files on disk.
 
 ## Requirements
 
 - Python 3.10+
 - `jq` — used by hook scripts to parse JSON
-- `tmux` (optional) — enables jump, split, and status-bar features
-- macOS (optional) — native notifications via `osascript`; other features work on Linux
+- `tmux` (optional) — enables splits, status-bar widget, and window management
+- macOS (optional) — native notifications via `osascript`; everything else works on Linux
 
 ## Configuration
 
@@ -117,43 +112,12 @@ Hooks are installed into `~/.claude/settings.json` and call shell scripts that u
 | `CLORCH_STATE_DIR` | `/tmp/clorch/state` | Directory for agent state files |
 | `CLORCH_SESSION` | `claude` | tmux session name |
 
-## Project Structure
-
-```
-src/clorch/
-├── cli.py                 # CLI entry point
-├── config.py              # Paths and defaults
-├── constants.py           # Colors, statuses, theme
-├── hooks/
-│   ├── installer.py       # Hook install/uninstall logic
-│   ├── event_handler.sh   # Main hook script
-│   └── notify_handler.sh  # Notification hook script
-├── notifications/
-│   ├── bell.py            # Terminal bell
-│   └── macos.py           # macOS osascript notifications
-├── state/
-│   ├── manager.py         # Scan and query state files
-│   ├── models.py          # AgentState, StatusSummary, ActionItem
-│   └── watcher.py         # Background polling thread
-├── tmux/
-│   ├── session.py         # TmuxSession class
-│   ├── navigator.py       # Jump-to-agent logic
-│   └── statusbar.py       # tmux status-right renderer
-└── tui/
-    ├── app.py             # Main Textual app
-    ├── app.tcss            # Stylesheet
-    └── widgets/           # StatusBar, AgentTable, ActionQueue, etc.
-```
-
 ## Development
 
 ```bash
-# Create venv and install in editable mode
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[rich]'
-
-# Run tests
 pytest
 ```
 
