@@ -98,6 +98,15 @@ Claude Code hooks
 
 Clorch hooks into [Claude Code's hook system](https://docs.anthropic.com/en/docs/claude-code/hooks). Each Claude Code session triggers shell scripts that write a JSON state file. The TUI reads those files on a timer. No terminal scraping, no ptrace, no API — just files on disk.
 
+## Safety
+
+Clorch does not read, modify, or access your project files. Here's what it touches:
+
+- **`~/.claude/settings.json`** — `clorch init` adds hook entries (a timestamped backup is created before any changes)
+- **`/tmp/clorch/state/`** — per-session JSON files with agent status, updated by hook scripts
+- **No network** — all communication is local, through files on disk
+- **`clorch uninstall`** — cleanly removes all hooks from settings
+
 ## Requirements
 
 - Python 3.10+
