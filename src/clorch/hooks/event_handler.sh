@@ -76,8 +76,14 @@ fi
 # TMUX is set when running inside a tmux pane — detect the window name.
 CWD_FROM_INPUT="$(echo "$INPUT_JSON" | jq -r '.cwd // empty')"
 TMUX_WINDOW=""
-# Try to detect tmux window — $TMUX may not be propagated by Claude Code
-TMUX_WINDOW="$(tmux display-message -p '#{window_name}' 2>/dev/null || true)"
+# Detect tmux window ONLY if Claude Code's tty is actually inside a tmux pane.
+# Plain `tmux display-message` returns whatever the last client sees, which is
+# wrong when the agent runs in an iTerm tab while a tmux server is up.
+_CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
+if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
+    TMUX_WINDOW="$(tmux list-panes -a -F '#{pane_tty} #{window_name}' 2>/dev/null \
+        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2; exit }')"
+fi
 CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg sid "$SESSION_ID" \
     --arg cwd "${CWD_FROM_INPUT:-}" \
@@ -93,7 +99,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     if .error_count == null then .error_count = 0 else . end |
     if .activity_history == null then .activity_history = [0,0,0,0,0,0,0,0,0,0] else . end |
     .pid = $pid |
-    if $tmux_win != "" then .tmux_window = $tmux_win else . end
+    .tmux_window = $tmux_win
     '
 )"
 
