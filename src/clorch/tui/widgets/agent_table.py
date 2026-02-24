@@ -48,7 +48,7 @@ class AgentTable(DataTable):
 
     def update_agents(self, agents: list[AgentState]) -> None:
         """Refresh table data with attention-first sorting."""
-        # Sort: PERM > ASK > ERR > WORK > IDLE, then by project name
+        # Sort: PERM > WAIT > ERR > WORK > IDLE, then by project name
         agents = sorted(
             agents,
             key=lambda a: (

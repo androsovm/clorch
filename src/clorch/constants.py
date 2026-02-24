@@ -20,7 +20,7 @@ STATUS_DISPLAY: dict[AgentStatus, tuple[str, str, str]] = {
     AgentStatus.WORKING:            (">>>", "WORK", "#5AE0A0"),
     AgentStatus.IDLE:               ("---", "IDLE", "#666666"),
     AgentStatus.WAITING_PERMISSION: ("[!]", "PERM", "#E05070"),
-    AgentStatus.WAITING_ANSWER:     ("[?]", "ASK",  "#D4A850"),
+    AgentStatus.WAITING_ANSWER:     ("[?]", "WAIT", "#D4A850"),
     AgentStatus.ERROR:              ("[X]", "ERR",  "#D060A0"),
 }
 

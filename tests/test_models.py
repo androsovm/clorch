@@ -284,7 +284,7 @@ class TestBuildActionQueue:
         assert build_action_queue(agents) == []
 
     def test_ordering_perm_first(self):
-        """PERM items come before ASK, which come before ERR."""
+        """PERM items come before WAIT, which come before ERR."""
         agents = [
             AgentState(session_id="err", status=AgentStatus.ERROR),
             AgentState(session_id="ask", status=AgentStatus.WAITING_ANSWER),
@@ -316,7 +316,7 @@ class TestBuildActionQueue:
         ]
         items = build_action_queue(agents)
         assert items[0].actionable is True   # PERM
-        assert items[1].actionable is False  # ASK
+        assert items[1].actionable is False  # WAIT
         assert items[2].actionable is False  # ERR
 
     def test_max_26_items(self):

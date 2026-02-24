@@ -398,24 +398,30 @@ class OrchestratorApp(App):
     def _send_approval(self, agent: AgentState, key: str) -> bool:
         """Map agent to tmux window and send keystroke.
 
-        If tmux is not available, falls back to jumping to the iTerm tab
-        so the user can approve/deny manually.
+        Only uses tmux send-keys when the agent actually lives in a tmux
+        pane (``tmux_window`` is set by the hook).  Falls back to jumping
+        to the iTerm tab so the user can approve/deny manually.
         """
         from clorch.tmux.navigator import map_agent_to_window, jump_to_iterm_tab
         from clorch.tmux.session import TmuxSession
 
         name = agent.project_name or agent.session_id[:12]
 
-        tmux = TmuxSession()
-        if tmux.is_available() and tmux.exists():
-            window = map_agent_to_window(agent, tmux)
-            if window:
-                target = tmux.get_pane_target(window, agent.tmux_pane or "0")
-                tmux.send_keys(target, key, literal=True)
-                tmux.send_keys(target, "Enter")
-                return True
+        # Only attempt tmux send-keys when the hook confirmed the agent
+        # is inside a tmux pane (tmux_window is non-empty).  Without this
+        # guard, cwd-based matching can send keystrokes to an unrelated
+        # zsh pane that happens to share the same working directory.
+        if agent.tmux_window:
+            tmux = TmuxSession()
+            if tmux.is_available() and tmux.exists():
+                target = tmux.get_pane_target(agent.tmux_window, agent.tmux_pane or "0")
+                ok = tmux.send_keys(target, key, literal=True)
+                if ok:
+                    tmux.send_keys(target, "Enter")
+                    return True
+                self.notify(f"tmux send-keys failed for {name}", severity="warning")
 
-        # No tmux — try iTerm tab switch so user can respond manually
+        # Agent is not in tmux — switch to its iTerm tab
         if jump_to_iterm_tab(agent):
             action = "approve" if key == "y" else "deny"
             self.notify(f"Switched to {name} — please {action} manually", severity="information")

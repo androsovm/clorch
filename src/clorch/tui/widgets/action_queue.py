@@ -100,7 +100,7 @@ class ActionQueue(Widget):
                 accent = "┃"
             elif item.agent.status.value == "WAITING_ANSWER":
                 symbol = "[?]"
-                type_label = "ASK "
+                type_label = "WAIT"
                 color = YELLOW
                 accent = " "
             else:

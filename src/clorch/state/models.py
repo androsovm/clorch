@@ -148,11 +148,11 @@ class ActionItem:
 
     letter: str
     agent: AgentState
-    actionable: bool  # True for PERM (y/n), False for ASK/ERR (jump only)
+    actionable: bool  # True for PERM (y/n), False for WAIT/ERR (jump only)
     summary: str
 
 
-# Sort priority for attention agents: PERM first, then ASK, then ERR.
+# Sort priority for attention agents: PERM first, then WAIT, then ERR.
 _ACTION_PRIORITY: dict[AgentStatus, int] = {
     AgentStatus.WAITING_PERMISSION: 0,
     AgentStatus.WAITING_ANSWER: 1,
@@ -163,7 +163,7 @@ _ACTION_PRIORITY: dict[AgentStatus, int] = {
 def build_action_queue(agents: list[AgentState]) -> list[ActionItem]:
     """Build the action queue from agents needing attention.
 
-    Filters to attention agents, sorts PERM > ASK > ERR, assigns
+    Filters to attention agents, sorts PERM > WAIT > ERR, assigns
     letters ``a``–``z`` (max 26 items).
     """
     attention = [a for a in agents if a.status in ATTENTION_STATUSES]
