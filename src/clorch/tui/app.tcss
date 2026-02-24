@@ -1,0 +1,40 @@
+#summary-bar {
+    height: 1;
+    padding: 0 2;
+    text-style: bold;
+}
+
+#action-queue {
+    height: auto;
+    max-height: 10;
+    padding: 0 1;
+}
+
+#action-queue.hidden {
+    display: none;
+}
+
+#agent-table {
+    height: 1fr;
+    min-height: 8;
+}
+
+#detail-panel {
+    height: auto;
+    max-height: 12;
+    padding: 0 1;
+    display: none;
+}
+
+#detail-panel.visible {
+    display: block;
+}
+
+#context-footer {
+    height: 1;
+    padding: 0 1;
+}
+
+DataTable > .datatable--header {
+    text-style: bold;
+}

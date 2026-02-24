@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# clorch — entrypoint for the Claude Code orchestrator.
+#
+# If the Python package is installed, delegate everything to it.
+# Otherwise, show install instructions.
+
+# -------------------------------------------------------------------
+# Try Python package first
+# -------------------------------------------------------------------
+if python3 -c "import clorch" 2>/dev/null; then
+    exec python3 -m clorch "$@"
+fi
+
+# -------------------------------------------------------------------
+# Fallback: package not installed
+# -------------------------------------------------------------------
+cat <<'EOF'
+clorch: Python package not installed.
+
+Install:
+    cd /path/to/clorch
+    pip install -e .
+
+Then run:
+    clorch init    # install hooks (once)
+    clorch         # launch dashboard
+EOF
+exit 1
