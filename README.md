@@ -4,11 +4,11 @@
 
 Mission control for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions.
 
-![Clorch TUI](docs/clorch-screenshot.png)
+![Clorch TUI](docs/clorch-screenshot-new.png)
 
-You run 10-20 sessions in Claude Code. One asks for permission, two are idle, and you can't remember which window has the one that's stuck. You cycle through panes, lose focus, and waste minutes just *finding* the right session.
+You run 10–20 Claude Code sessions at once. One needs a file change approved, another is waiting for a skill, a third just finished its plan — and you're alt-tabbing through a wall of terminal tabs trying to keep up.
 
-Clorch fixes this. One dashboard shows every agent's status. Permission request pops up — press `y` right from the dashboard. Need to jump to a session — press `→`. That's it.
+Clorch is mission control. One dashboard shows every active session: what it's doing, what it needs. Approve a permission right here, or jump to the right tab in one keystroke.
 
 ## Features
 
