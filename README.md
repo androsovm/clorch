@@ -6,7 +6,7 @@ Mission control for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 
 ![Clorch TUI](docs/clorch-screenshot.png)
 
-You run 10-20 session in Claude Code. One asks for permission, two are idle, and you can't remember which window has the one that's stuck. You cycle through panes, lose focus, and waste minutes just *finding* the right session.
+You run 10-20 sessions in Claude Code. One asks for permission, two are idle, and you can't remember which window has the one that's stuck. You cycle through panes, lose focus, and waste minutes just *finding* the right session.
 
 Clorch fixes this. One dashboard shows every agent's status. Permission request pops up — press `y` right from the dashboard. Need to jump to a session — press `→`. That's it.
 
