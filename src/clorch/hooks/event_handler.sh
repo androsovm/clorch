@@ -83,7 +83,7 @@ TMUX_PANE=""
 _CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
 if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
     _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty} #{window_name} #{pane_index}' 2>/dev/null \
-        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2, $3; exit }')"
+        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2, $3; exit }')" || true
     TMUX_WINDOW="${_TMUX_INFO%% *}"
     TMUX_PANE="${_TMUX_INFO##* }"
 fi
