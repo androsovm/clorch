@@ -78,6 +78,8 @@ class ContextFooter(Static):
             text.append("jump ", style=f"{GREY}")
             text.append("[d]", style=f"bold {CYAN}")
             text.append("detail ", style=f"{GREY}")
+            text.append("[!]", style=f"bold {CYAN}")
+            text.append("yolo ", style=f"{GREY}")
             text.append("[?]", style=f"bold {CYAN}")
             text.append("help ", style=f"{GREY}")
             text.append("[q]", style=f"bold {CYAN}")

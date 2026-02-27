@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clorch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Orchestrator dashboard for multiple Claude Code sessions in tmux"
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "textual>=0.85.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

@@ -18,5 +18,8 @@ CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 TMUX_SESSION_NAME = os.environ.get("CLORCH_SESSION", "claude")
 TMUX_ORCH_WINDOW = "orch"
 
+# Auto-approve rules
+RULES_PATH = Path.home() / ".config" / "clorch" / "rules.yaml"
+
 # Polling
 STATE_POLL_INTERVAL_MS = 500

@@ -26,6 +26,7 @@ class HeaderBar(Static):
         self._tmux_session: str = ""
         self._anim_frame: int = 0
         self._summary: StatusSummary | None = None
+        self._yolo: bool = False
         # tools/min tracking
         self._prev_total_tools: int = 0
         self._prev_time: float = time.monotonic()
@@ -35,10 +36,15 @@ class HeaderBar(Static):
         """Set the tmux session name for display."""
         self._tmux_session = name
 
+    def set_yolo(self, enabled: bool) -> None:
+        """Toggle the YOLO badge display."""
+        self._yolo = enabled
+        self._refresh_display()
+
     def tick_animation(self, frame: int) -> None:
         """Advance animation frame and re-render if there are working agents."""
         self._anim_frame = frame
-        if self._summary and self._summary.working > 0:
+        if self._summary and (self._summary.working > 0 or self._yolo):
             self._refresh_display()
 
     def update_summary(self, summary: StatusSummary) -> None:
@@ -62,6 +68,12 @@ class HeaderBar(Static):
 
         # Branding
         text.append(" CLORCH", style=f"bold {GREEN}")
+        if self._yolo:
+            # Blinking warning badge — alternates every 2 frames
+            if self._anim_frame % 4 < 2:
+                text.append(" \u26a0 YOLO ", style=f"bold white on {RED}")
+            else:
+                text.append(" \u26a0 YOLO ", style=f"bold {RED}")
         text.append(" \u2500\u2500\u2500 ", style=f"dim {GREY}")
 
         # tmux session name (if available)

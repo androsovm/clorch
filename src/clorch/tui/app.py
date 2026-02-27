@@ -11,6 +11,8 @@ from textual.widgets import Input, Label, Static
 from clorch.state.manager import StateManager
 from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
 from clorch.constants import AgentStatus, ANIM_INTERVAL, TELEMETRY_HISTORY_LEN, TELEMETRY_BUCKET_TICKS
+from clorch.config import RULES_PATH
+from clorch.rules import RulesConfig, load_rules, evaluate
 from clorch.tui.widgets.session_list import SessionList, ListHeader
 from clorch.tui.widgets.agent_detail import AgentDetail
 from clorch.tui.widgets.header_bar import HeaderBar
@@ -72,7 +74,7 @@ class HelpScreen(ModalScreen[None]):
     HelpScreen > Vertical {
         width: 60;
         height: auto;
-        max-height: 30;
+        max-height: 38;
         border: solid;
         padding: 1 2;
     }
@@ -114,7 +116,19 @@ class HelpScreen(ModalScreen[None]):
 
         text.append("SETTINGS\n", style=f"bold {YELLOW}")
         text.append("  [s]", style=f"bold {CYAN}")
-        text.append("       Toggle sound notifications\n\n")
+        text.append("       Toggle sound notifications\n")
+        text.append("  [!]", style=f"bold {CYAN}")
+        text.append("       Toggle YOLO mode (auto-approve)\n\n")
+
+        text.append("YOLO MODE & AUTO-APPROVE RULES\n", style=f"bold {YELLOW}")
+        text.append("  Config: ", style="dim")
+        text.append("~/.config/clorch/rules.yaml\n", style=f"{CYAN}")
+        text.append("  YOLO auto-approves all tools (tmux-only)\n", style="")
+        text.append("  ", style="")
+        text.append("Deny rules \u2192 manual review", style=f"bold {RED}")
+        text.append(", even in YOLO\n")
+        text.append("  Rules: tools + optional regex pattern\n", style="")
+        text.append("  First matching rule wins, default: ask\n\n", style="dim")
 
         text.append("TMUX MANAGEMENT\n", style=f"bold {YELLOW}")
         text.append("  [N]", style=f"bold {CYAN}")
@@ -173,6 +187,8 @@ class OrchestratorApp(App):
         self._extended_history: dict[str, list[int]] = {}
         self._pending_deltas: dict[str, int] = {}
         self._telemetry_tick: int = 0
+        self._rules_config: RulesConfig = RulesConfig()
+        self._skip_warned: set[str] = set()  # session IDs already warned about no-tmux skip
 
     def compose(self) -> ComposeResult:
         yield HeaderBar(id="header-bar")
@@ -200,10 +216,19 @@ class OrchestratorApp(App):
         self._refresh_timer = self.set_interval(0.5, self._poll_state)
         self._cleanup_timer = self.set_interval(30, self._run_cleanup)
         self._anim_timer = self.set_interval(ANIM_INTERVAL, self._tick_animation)
+        self._load_rules()
         self._run_cleanup()
         self._poll_state()
         self._apply_tmux_statusbar()
         self._init_header_tmux()
+
+    def _load_rules(self) -> None:
+        """Load auto-approve rules from config file."""
+        self._rules_config = load_rules(RULES_PATH)
+        settings = self.query_one("#settings-panel", SettingsPanel)
+        settings.set_rules_count(len(self._rules_config.rules))
+        settings.set_yolo(self._rules_config.yolo)
+        self.query_one("#header-bar", HeaderBar).set_yolo(self._rules_config.yolo)
 
     def _run_cleanup(self) -> None:
         """Remove stale state files (no activity for 30+ minutes)."""
@@ -227,6 +252,9 @@ class OrchestratorApp(App):
         # Build action queue
         self._action_items = build_action_queue(agents)
 
+        # Auto-approve/deny via rules engine (tmux-only)
+        self._auto_evaluate_actions()
+
         # Update session list (agents + inline action hints)
         table = self.query_one("#session-list", SessionList)
         table.update_agents(agents)
@@ -240,6 +268,9 @@ class OrchestratorApp(App):
             if old_status is None:
                 continue  # new agent, skip
             if old_status != agent.status:
+                # Reset skip-warning when agent leaves WAITING_PERMISSION
+                if old_status == AgentStatus.WAITING_PERMISSION:
+                    self._skip_warned.discard(sid)
                 # Status transition events
                 if agent.status == AgentStatus.WORKING:
                     event_log.write_event(agent.project_name, "\u25b6", agent.last_tool or "working", "green")
@@ -303,6 +334,7 @@ class OrchestratorApp(App):
             self._extended_history.pop(sid, None)
             self._prev_tool_counts.pop(sid, None)
             self._pending_deltas.pop(sid, None)
+            self._skip_warned.discard(sid)
 
         # --- Update detail + telemetry if visible ---
         if self._detail_mode != "hidden":
@@ -338,12 +370,79 @@ class OrchestratorApp(App):
             footer.set_mode("default")
 
     # ------------------------------------------------------------------
+    # Auto-approve / YOLO
+    # ------------------------------------------------------------------
+
+    def _auto_evaluate_actions(self) -> None:
+        """Run rules engine on WAITING_PERMISSION agents and auto-approve/deny."""
+        event_log = self.query_one("#event-log-panel", EventLog)
+        remaining: list[ActionItem] = []
+
+        for item in self._action_items:
+            if not item.actionable:
+                remaining.append(item)
+                continue
+
+            agent = item.agent
+            tool_name = agent.last_tool or ""
+            tool_summary = agent.tool_request_summary or ""
+            decision = evaluate(self._rules_config, tool_name, tool_summary)
+
+            if decision == "ask":
+                remaining.append(item)
+                continue
+
+            # Only auto-approve/deny agents in tmux sessions
+            if not agent.tmux_window:
+                if agent.session_id not in self._skip_warned:
+                    self._skip_warned.add(agent.session_id)
+                    name = agent.project_name or agent.session_id[:12]
+                    event_log.write_event(name, "\u26a0", "skip auto-approve: no tmux", "yellow")
+                remaining.append(item)
+                continue
+
+            name = agent.project_name or agent.session_id[:12]
+
+            # Safety re-poll before acting
+            if not self._manager.verify_status(agent.session_id, AgentStatus.WAITING_PERMISSION):
+                remaining.append(item)
+                continue
+
+            key = "y" if decision == "approve" else "n"
+            if self._send_approval(agent, key):
+                label = "auto-approved" if decision == "approve" else "auto-denied"
+                icon = "\u2714" if decision == "approve" else "\u2718"
+                color = "green" if decision == "approve" else "red"
+                event_log.write_event(name, icon, f"{label}: {tool_name}", color)
+            else:
+                remaining.append(item)
+
+        self._action_items = remaining
+
+    def _toggle_yolo(self) -> None:
+        """Toggle YOLO mode on/off (runtime override of config)."""
+        self._rules_config.yolo = not self._rules_config.yolo
+        yolo = self._rules_config.yolo
+        self.query_one("#header-bar", HeaderBar).set_yolo(yolo)
+        self.query_one("#settings-panel", SettingsPanel).set_yolo(yolo)
+        if yolo:
+            self.notify("YOLO mode ON \u2014 auto-approve all (tmux only)", severity="warning")
+        else:
+            self.notify("YOLO mode OFF")
+
+    # ------------------------------------------------------------------
     # Key dispatch
     # ------------------------------------------------------------------
 
     def on_key(self, event: Key) -> None:
         """Dynamic key dispatch: letters for actions, numbers for sessions."""
         key = event.key
+
+        # ! — toggle YOLO mode
+        if key == "exclamation_mark":
+            self._toggle_yolo()
+            event.prevent_default()
+            return
 
         # ? — help overlay
         if key == "question_mark":

@@ -81,7 +81,7 @@ Screen {
 
 #settings-panel {
     height: auto;
-    max-height: 3;
+    max-height: 6;
     border: round #4C566A;
     border-title-color: #88C0D0;
     border-title-style: bold;
