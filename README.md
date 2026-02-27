@@ -16,14 +16,12 @@ You run 10–20 Claude Code sessions at once. One needs a file change approved, 
 - **Approve / deny** permissions without leaving the dashboard (`y` / `n` / `Y` for all)
 - **YOLO mode** — auto-approve all tool requests with one key (`!`), deny rules still force manual review
 - **Rules engine** — configurable per-tool auto-approve/deny via `~/.config/clorch/rules.yaml`
-- **Jump** to any agent's tmux window in one keystroke
+- **Jump** to any Claude Code's session in one keystroke
 - **Action queue** — pending permissions are listed with hotkeys, newest first
 - **Git context** — branch name and dirty file count per agent
 - **Staleness detection** — yellow/red timer on agents idle >30s/120s
 - **Sound alerts** — distinct macOS system sounds for permission, answer, and error states
 - **tmux status-bar widget** — agent counts at a glance
-- **macOS notifications** and terminal bell when an agent needs attention
-- **Auto-sync hooks** — TUI updates hook scripts on startup, no manual `clorch init` after upgrades
 
 ## Quick Start
 
