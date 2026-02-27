@@ -14,10 +14,16 @@ Clorch is mission control. One dashboard shows every active session: what it's d
 
 - **Real-time tracking** — hooks push events, no terminal scraping or polling
 - **Approve / deny** permissions without leaving the dashboard (`y` / `n` / `Y` for all)
+- **YOLO mode** — auto-approve all tool requests with one key (`!`), deny rules still force manual review
+- **Rules engine** — configurable per-tool auto-approve/deny via `~/.config/clorch/rules.yaml`
 - **Jump** to any agent's tmux window in one keystroke
 - **Action queue** — pending permissions are listed with hotkeys, newest first
+- **Git context** — branch name and dirty file count per agent
+- **Staleness detection** — yellow/red timer on agents idle >30s/120s
+- **Sound alerts** — distinct macOS system sounds for permission, answer, and error states
 - **tmux status-bar widget** — agent counts at a glance
 - **macOS notifications** and terminal bell when an agent needs attention
+- **Auto-sync hooks** — TUI updates hook scripts on startup, no manual `clorch init` after upgrades
 
 ## Quick Start
 
@@ -62,6 +68,9 @@ clorch --version    Print version
 | `a`–`z` | Focus an action item |
 | `y` / `n` | Approve / deny focused permission |
 | `Y` | Approve **all** pending permissions |
+| `!` | Toggle YOLO mode (auto-approve) |
+| `s` | Toggle sound notifications |
+| `d` | Toggle agent detail panel |
 | `?` | Help overlay |
 
 ## How It Works
@@ -112,6 +121,26 @@ Clorch does not read, modify, or access your project files. Here's what it touch
 | `CLORCH_STATE_DIR` | `/tmp/clorch/state` | Directory for agent state files |
 | `CLORCH_SESSION` | `claude` | tmux session name |
 | `CLORCH_TERMINAL` | auto-detect | Force terminal backend: `iterm`, `ghostty`, `apple_terminal` |
+
+### Auto-approve rules
+
+Create `~/.config/clorch/rules.yaml` to configure YOLO mode and per-tool rules:
+
+```yaml
+yolo: false          # start with YOLO off (toggle with [!] in TUI)
+
+rules:
+  - tools: [Bash]
+    pattern: "rm -rf"
+    action: deny       # always require manual review
+
+  - tools: [Read, Glob, Grep]
+    action: approve    # safe read-only tools
+```
+
+- **First matching rule wins**, unmatched tools follow YOLO state (approve if on, ask if off)
+- **Deny rules force manual review** even when YOLO is active
+- YOLO auto-approve only works for agents running in tmux sessions
 
 ## Development
 
