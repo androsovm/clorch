@@ -1,6 +1,8 @@
 """Styled header bar with Unicode separators, tmux session name, and counts."""
 from __future__ import annotations
 
+import time
+
 from textual.widgets import Static
 from rich.text import Text
 
@@ -24,6 +26,10 @@ class HeaderBar(Static):
         self._tmux_session: str = ""
         self._anim_frame: int = 0
         self._summary: StatusSummary | None = None
+        # tools/min tracking
+        self._prev_total_tools: int = 0
+        self._prev_time: float = time.monotonic()
+        self._tools_per_min: float = 0.0
 
     def set_tmux_session(self, name: str) -> None:
         """Set the tmux session name for display."""
@@ -37,6 +43,15 @@ class HeaderBar(Static):
 
     def update_summary(self, summary: StatusSummary) -> None:
         self._summary = summary
+        # Compute tools/min delta rate
+        now = time.monotonic()
+        elapsed = now - self._prev_time
+        if elapsed >= 3.0:  # Update rate every 3+ seconds to avoid jitter
+            delta_tools = summary.total_tools - self._prev_total_tools
+            if delta_tools >= 0:
+                self._tools_per_min = delta_tools / elapsed * 60.0
+            self._prev_total_tools = summary.total_tools
+            self._prev_time = now
         self._refresh_display()
 
     def _refresh_display(self) -> None:
@@ -76,6 +91,11 @@ class HeaderBar(Static):
 
         text.append("Errors: ", style="dim")
         text.append(str(summary.error), style=f"bold {PINK}")
+
+        # tools/min rate
+        if self._tools_per_min >= 1.0:
+            text.append(" \u2502 ", style=f"dim {GREY}")
+            text.append(f"{int(self._tools_per_min)} t/m", style="dim")
 
         # Agent total
         text.append(" \u2500\u2500\u2500 ", style=f"dim {GREY}")

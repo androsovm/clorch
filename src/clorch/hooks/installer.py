@@ -89,6 +89,29 @@ def _copy_hook_scripts() -> None:
         log.info("Installed %s -> %s", src, dst)
 
 
+def ensure_hooks_synced() -> None:
+    """Silently sync hook scripts if they are outdated or missing.
+
+    Called on TUI startup so that ``pip install --upgrade`` automatically
+    picks up new hook scripts without requiring ``clorch init``.
+    Only copies when the installed script differs from the bundled one.
+    """
+    source_dir = _hook_scripts_source_dir()
+    for script_name in ("event_handler.sh", "notify_handler.sh"):
+        src = source_dir / script_name
+        dst = HOOKS_DATA_DIR / script_name
+        if not src.is_file():
+            continue
+        if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime:
+            # Same or newer modification time — skip
+            if dst.read_bytes() == src.read_bytes():
+                continue
+        HOOKS_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        dst.chmod(dst.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        log.info("Auto-synced %s -> %s", src, dst)
+
+
 # ------------------------------------------------------------------
 # Merge logic
 # ------------------------------------------------------------------

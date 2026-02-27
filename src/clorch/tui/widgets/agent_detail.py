@@ -1,6 +1,8 @@
 """Agent detail panel — bottom panel showing agent info or PERM details."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from textual.widgets import Static
 from rich.text import Text
 
@@ -115,6 +117,34 @@ class AgentDetail(Static):
             text.append(f"{'Path':<{_LABEL_W}s}", style=f"dim {GREY}")
             text.append(f"{path}", style=GREEN)
             text.append("\n")
+
+        # Git info
+        if agent.git_branch:
+            text.append(f"{'Git':<{_LABEL_W}s}", style=f"dim {GREY}")
+            text.append(agent.git_branch, style=f"bold {CYAN}")
+            if agent.git_dirty_count > 0:
+                text.append(f" ({agent.git_dirty_count} dirty)", style=f"bold {YELLOW}")
+            else:
+                text.append(" \u2713", style=f"dim {GREEN}")
+            text.append("\n")
+
+        # Last event age
+        if agent.last_event_time:
+            try:
+                last_t = datetime.fromisoformat(agent.last_event_time.replace("Z", "+00:00"))
+                age_s = (datetime.now(timezone.utc) - last_t).total_seconds()
+                text.append(f"{'Last event':<{_LABEL_W}s}", style=f"dim {GREY}")
+                if age_s > 120:
+                    mins = int(age_s) // 60
+                    secs = int(age_s) % 60
+                    text.append(f"{mins}m{secs:02d}s ago", style=f"bold {RED}")
+                elif age_s > 30:
+                    text.append(f"{int(age_s)}s ago", style=f"bold {YELLOW}")
+                else:
+                    text.append(f"{int(age_s)}s ago", style=GREEN)
+                text.append("\n")
+            except (ValueError, TypeError):
+                pass
 
         # Model + Last tool
         text.append(f"{'Model':<{_LABEL_W}s}", style=f"dim {GREY}")

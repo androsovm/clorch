@@ -31,6 +31,9 @@ class AgentState:
     last_compact_time: str = ""
     task_completed_count: int = 0
     activity_history: list[int] = field(default_factory=lambda: [0] * ACTIVITY_HISTORY_LEN)
+    # Git context
+    git_branch: str = ""
+    git_dirty_count: int = 0
     # Process tracking — used to detect dead sessions
     pid: int | None = None
     # tmux mapping (filled by navigator)
@@ -84,6 +87,8 @@ class AgentState:
             compact_count=data.get("compact_count", 0),
             last_compact_time=data.get("last_compact_time", ""),
             task_completed_count=data.get("task_completed_count", 0),
+            git_branch=data.get("git_branch", ""),
+            git_dirty_count=data.get("git_dirty_count", 0),
             activity_history=data.get("activity_history", [0] * ACTIVITY_HISTORY_LEN),
             pid=data.get("pid"),
             tmux_window=data.get("tmux_window", ""),
@@ -102,6 +107,7 @@ class StatusSummary:
     waiting_permission: int = 0
     waiting_answer: int = 0
     error: int = 0
+    total_tools: int = 0
 
     @property
     def total(self) -> int:
@@ -130,6 +136,7 @@ class StatusSummary:
     def from_agents(cls, agents: list[AgentState]) -> StatusSummary:
         s = cls()
         for a in agents:
+            s.total_tools += a.tool_count
             match a.status:
                 case AgentStatus.WORKING:
                     s.working += 1

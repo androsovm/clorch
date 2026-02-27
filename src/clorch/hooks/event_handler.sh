@@ -87,6 +87,20 @@ if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
     TMUX_WINDOW="${_TMUX_INFO%% *}"
     TMUX_PANE="${_TMUX_INFO##* }"
 fi
+# Collect git data from CWD (branch name and dirty file count)
+GIT_BRANCH=""
+GIT_DIRTY=0
+_EFFECTIVE_CWD="${CWD_FROM_INPUT:-}"
+if [[ -z "$_EFFECTIVE_CWD" ]]; then
+    _EFFECTIVE_CWD="$(echo "$CURRENT_STATE" | jq -r '.cwd // empty')"
+fi
+if [[ -n "$_EFFECTIVE_CWD" && -d "$_EFFECTIVE_CWD" ]]; then
+    GIT_BRANCH="$(cd "$_EFFECTIVE_CWD" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+    if [[ -n "$GIT_BRANCH" ]]; then
+        GIT_DIRTY="$(cd "$_EFFECTIVE_CWD" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+    fi
+fi
+
 CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg sid "$SESSION_ID" \
     --arg cwd "${CWD_FROM_INPUT:-}" \
@@ -95,6 +109,8 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg tmux_win "${TMUX_WINDOW:-}" \
     --arg tmux_pane "${TMUX_PANE:-}" \
     --arg term_prog "${TERM_PROGRAM:-}" \
+    --arg git_branch "$GIT_BRANCH" \
+    --argjson git_dirty "${GIT_DIRTY:-0}" \
     '
     if .session_id == null or .session_id == "" then .session_id = $sid else . end |
     if (.cwd == null or .cwd == "") and $cwd != "" then .cwd = $cwd else . end |
@@ -106,7 +122,10 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     .pid = $pid |
     .tmux_window = $tmux_win |
     .tmux_pane = $tmux_pane |
-    if .term_program == null or .term_program == "" then .term_program = $term_prog else . end
+    if .term_program == null or .term_program == "" then .term_program = $term_prog else . end |
+    if (.git_branch == null or .git_branch == "") and $git_branch != "" then .git_branch = $git_branch else . end |
+    if (.git_dirty_count == null) and $git_branch != "" then .git_dirty_count = $git_dirty else . end |
+    if $git_branch != "" then .git_dirty_count = $git_dirty else . end
     '
 )"
 
@@ -133,6 +152,8 @@ case "$EVENT" in
             --arg tmux_win "${TMUX_WINDOW:-}" \
             --arg tmux_pane "${TMUX_PANE:-}" \
             --arg term_prog "${TERM_PROGRAM:-}" \
+            --arg git_branch "$GIT_BRANCH" \
+            --argjson git_dirty "${GIT_DIRTY:-0}" \
             '{
                 session_id: $sid,
                 status: $status,
@@ -149,7 +170,9 @@ case "$EVENT" in
                 pid: $pid,
                 tmux_window: $tmux_win,
                 tmux_pane: $tmux_pane,
-                term_program: $term_prog
+                term_program: $term_prog,
+                git_branch: $git_branch,
+                git_dirty_count: $git_dirty
             }' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;

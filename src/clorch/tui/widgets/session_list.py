@@ -1,6 +1,8 @@
 """Session list widget — ListView replacement for AgentTable (DataTable)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from textual.app import ComposeResult
 from textual.widgets import ListView, ListItem, Static
 from textual.message import Message
@@ -21,10 +23,14 @@ class ListHeader(Static):
         text = Text()
         # Col 1: accent (2) + Col 2: num (3) + separator (1) = 6 chars
         text.append("      ", style="dim")
-        # Col 3: project name (22)
-        text.append(f"{'NAME':<22s}", style=f"dim {GREY}")
+        # Col 3: project name (12)
+        text.append(f"{'NAME':<12s}", style=f"dim {GREY}")
+        # Col 3b: git branch (10)
+        text.append(f"{'BRANCH':<10s}", style=f"dim {GREY}")
         # Col 4: status (1 space + 8)
         text.append(f" {'STATUS':<8s}", style=f"dim {GREY}")
+        # Col 4b: stale (5)
+        text.append(f"{'':5s}", style="dim")
         # Col 5: tool (1 space + 12)
         text.append(f" {'TOOL':<12s}", style=f"dim {GREY}")
         # Col 6: tool count (4)
@@ -145,17 +151,19 @@ class SessionRow(ListItem):
     # Fixed column widths for vertical alignment across all rows.
     _COL_ACCENT = 2     # "┃ " or "  "
     _COL_NUM = 3        # "[a]" or " 1 "
-    _COL_PROJECT = 22   # project name padded
+    _COL_PROJECT = 12   # project name padded
+    _COL_BRANCH = 10    # git branch padded
     _COL_STATUS = 8     # ">>> WORK" / "[!] PERM" — symbol(3) + space + label(4)
+    _COL_STALE = 5      # stale age indicator
     _COL_TOOL = 12      # last tool name padded
     _COL_TCNT = 4       # tool count right-aligned
     _COL_ECNT = 3       # error count right-aligned
     _COL_UPTIME = 8     # "1h 23m" right-aligned
     _COL_SPARK = 10     # sparkline chars
 
-    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(22)
-    # + status(1+8) + tool(1+12) + tcnt(4) + ecnt(3) + uptime(8) + sep(2) + sparkline(10)
-    _FIXED_PREFIX_WIDTH = 77
+    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(12) + branch(10)
+    # + status(1+8) + stale(5) + tool(1+12) + tcnt(4) + ecnt(3) + uptime(8) + sep(2) + sparkline(10)
+    _FIXED_PREFIX_WIDTH = 82
 
     def _render_row(self) -> Text:
         """Render the row as Rich Text with fixed-width columns."""
@@ -190,15 +198,50 @@ class SessionRow(ListItem):
 
         text.append(" ", style="dim")
 
-        # Col 3: Project name (fixed 18 chars)
+        # Col 3: Project name (fixed 12 chars)
         project = agent.project_name or agent.session_id[:12]
         if agent.subagent_count > 0:
             project = f"{project} [{agent.subagent_count}s]"
         text.append(f"{project:<{self._COL_PROJECT}s}"[:self._COL_PROJECT], style="bold white")
 
+        # Col 3b: Git branch (fixed 10 chars)
+        branch = agent.git_branch or ""
+        if branch:
+            branch_display = branch[:self._COL_BRANCH - 1]
+            if agent.git_dirty_count > 0:
+                # Truncate one more to fit the '*'
+                branch_display = branch[:self._COL_BRANCH - 2] + "*"
+            text.append(
+                f"{branch_display:<{self._COL_BRANCH}s}"[:self._COL_BRANCH],
+                style=f"bold {CYAN}" if agent.git_dirty_count == 0 else f"bold {YELLOW}",
+            )
+        else:
+            text.append(" " * self._COL_BRANCH, style="dim")
+
         # Col 4: Status badge (fixed 8 chars: ">>> WORK", "[!] PERM")
         status_str = f"{symbol} {label:<4s}"
         text.append(f" {status_str:<{self._COL_STATUS}s}", style=f"bold {color}")
+
+        # Col 4b: Stale indicator (fixed 5 chars) — only for WORKING status
+        stale_str = ""
+        if agent.status == AgentStatus.WORKING and agent.last_event_time:
+            try:
+                last_t = datetime.fromisoformat(agent.last_event_time.replace("Z", "+00:00"))
+                age_s = (datetime.now(timezone.utc) - last_t).total_seconds()
+                if age_s > 120:
+                    mins = int(age_s) // 60
+                    secs = int(age_s) % 60
+                    stale_str = f"{mins}m{secs:02d}"[:5]
+                    text.append(f"{stale_str:<5s}", style=f"bold {RED}")
+                elif age_s > 30:
+                    stale_str = f"{int(age_s)}s"
+                    text.append(f"{stale_str:<5s}", style=f"bold {YELLOW}")
+                else:
+                    text.append(" " * self._COL_STALE, style="dim")
+            except (ValueError, TypeError):
+                text.append(" " * self._COL_STALE, style="dim")
+        else:
+            text.append(" " * self._COL_STALE, style="dim")
 
         # Col 5: Last tool (fixed 12 chars)
         tool = (agent.last_tool or "-")[:self._COL_TOOL]

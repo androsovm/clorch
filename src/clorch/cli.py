@@ -12,8 +12,10 @@ import sys
 
 def _cmd_dash(args: argparse.Namespace) -> None:
     """Launch the Textual TUI dashboard."""
+    from clorch.hooks.installer import ensure_hooks_synced
     from clorch.tui.app import run_dashboard
 
+    ensure_hooks_synced()
     run_dashboard()
 
 
