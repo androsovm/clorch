@@ -241,11 +241,14 @@ case "$EVENT" in
         ;;
 
     Stop)
-        # Don't downgrade WAITING_ANSWER / WAITING_PERMISSION to IDLE —
-        # the Notification / PermissionRequest handler already set the
-        # correct attention status and Stop fires *after* them.
+        # Don't downgrade WAITING_ANSWER to IDLE — the Notification
+        # handler already set it and Stop fires right after (before the
+        # user types their answer).
+        # WAITING_PERMISSION is NOT preserved: permission requests block
+        # the turn, so by the time Stop fires the user has already
+        # approved or denied — the status should go back to IDLE.
         CURRENT_STATUS="$(echo "$CURRENT_STATE" | jq -r '.status // "IDLE"')"
-        if [[ "$CURRENT_STATUS" == "WAITING_ANSWER" || "$CURRENT_STATUS" == "WAITING_PERMISSION" ]]; then
+        if [[ "$CURRENT_STATUS" == "WAITING_ANSWER" ]]; then
             STOP_STATUS="$CURRENT_STATUS"
         else
             STOP_STATUS="IDLE"

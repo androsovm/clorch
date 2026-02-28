@@ -215,6 +215,7 @@ class OrchestratorApp(App):
     def on_mount(self) -> None:
         self._refresh_timer = self.set_interval(0.5, self._poll_state)
         self._cleanup_timer = self.set_interval(30, self._run_cleanup)
+        self._perm_check_timer = self.set_interval(5, self._check_stale_permissions)
         self._anim_timer = self.set_interval(ANIM_INTERVAL, self._tick_animation)
         self._load_rules()
         self._run_cleanup()
@@ -229,6 +230,10 @@ class OrchestratorApp(App):
         settings.set_rules_count(len(self._rules_config.rules))
         settings.set_yolo(self._rules_config.yolo)
         self.query_one("#header-bar", HeaderBar).set_yolo(self._rules_config.yolo)
+
+    def _check_stale_permissions(self) -> None:
+        """Reset WAITING_PERMISSION states stuck after denial (no Stop event)."""
+        self._manager.reset_stale_permissions()
 
     def _run_cleanup(self) -> None:
         """Remove stale state files (no activity for 30+ minutes)."""

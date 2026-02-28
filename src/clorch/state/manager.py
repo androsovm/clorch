@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -9,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from clorch.config import STATE_DIR
+from clorch.constants import AgentStatus
 from clorch.state.models import AgentState, StatusSummary
 
 log = logging.getLogger(__name__)
@@ -172,4 +174,52 @@ class StateManager:
                 except OSError as exc:
                     log.warning("Could not remove %s: %s", path, exc)
 
+        # Third pass: reset stale WAITING_PERMISSION (called from
+        # poll cycle too, but run here as well for completeness).
+        self.reset_stale_permissions(now)
+
         return removed
+
+    def reset_stale_permissions(self, now: float | None = None, ttl_seconds: int = 30) -> None:
+        """Reset WAITING_PERMISSION states that haven't been updated recently.
+
+        Permission prompts block the Claude turn.  When the user responds
+        (approve or deny) the turn continues and new events update the
+        state file.  However, Claude Code does NOT fire a ``Stop`` event
+        after permission denial — the session goes to an "Interrupted"
+        prompt with no hook.  Additionally, async hook race conditions
+        can cause PermissionRequest to overwrite Stop's IDLE.
+
+        If the file hasn't changed for *ttl_seconds* while still showing
+        WAITING_PERMISSION, the permission was already handled — reset
+        to IDLE.
+        """
+        if now is None:
+            now = time.time()
+        if not self._state_dir.is_dir():
+            return
+
+        for path in self._state_dir.glob("*.json"):
+            try:
+                file_age = now - path.stat().st_mtime
+                if file_age < ttl_seconds:
+                    continue
+                agent = AgentState.from_json_file(path)
+            except (OSError, ValueError, KeyError):
+                continue
+
+            if agent.status != AgentStatus.WAITING_PERMISSION:
+                continue
+
+            # Patch the JSON on disk: status → IDLE, clear stale fields.
+            try:
+                data = json.loads(path.read_text())
+                data["status"] = "IDLE"
+                data["tool_request_summary"] = None
+                path.write_text(json.dumps(data))
+                log.info(
+                    "Reset stale WAITING_PERMISSION → IDLE for %s (age=%ds)",
+                    path.name, int(file_age),
+                )
+            except OSError as exc:
+                log.warning("Could not reset %s: %s", path, exc)
