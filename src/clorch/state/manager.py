@@ -181,7 +181,7 @@ class StateManager:
         return removed
 
     def reset_stale_permissions(self, now: float | None = None, ttl_seconds: int = 30) -> None:
-        """Reset WAITING_PERMISSION states that haven't been updated recently.
+        """Reset WAITING_PERMISSION states for dead processes.
 
         Permission prompts block the Claude turn.  When the user responds
         (approve or deny) the turn continues and new events update the
@@ -190,9 +190,10 @@ class StateManager:
         prompt with no hook.  Additionally, async hook race conditions
         can cause PermissionRequest to overwrite Stop's IDLE.
 
-        If the file hasn't changed for *ttl_seconds* while still showing
-        WAITING_PERMISSION, the permission was already handled — reset
-        to IDLE.
+        If the Claude Code process is still alive, the permission is
+        legitimately pending (the user may still be reading the request)
+        — leave it alone.  Only reset when the process is dead or the
+        file has been stale for *ttl_seconds* without a PID to check.
         """
         if now is None:
             now = time.time()
@@ -211,6 +212,18 @@ class StateManager:
             if agent.status != AgentStatus.WAITING_PERMISSION:
                 continue
 
+            # If the process is still alive, the permission is genuinely
+            # pending — the user may be reading the request or thinking.
+            # Only reset when the process is confirmed dead.
+            if agent.pid is not None:
+                try:
+                    os.kill(agent.pid, 0)
+                    continue  # Process alive → permission still pending
+                except ProcessLookupError:
+                    pass  # Process dead → safe to reset
+                except PermissionError:
+                    continue  # Process exists but can't signal → keep
+
             # Patch the JSON on disk: status → IDLE, clear stale fields.
             try:
                 data = json.loads(path.read_text())
@@ -218,8 +231,8 @@ class StateManager:
                 data["tool_request_summary"] = None
                 path.write_text(json.dumps(data))
                 log.info(
-                    "Reset stale WAITING_PERMISSION → IDLE for %s (age=%ds)",
-                    path.name, int(file_age),
+                    "Reset stale WAITING_PERMISSION → IDLE for %s (age=%ds, pid=%s dead)",
+                    path.name, int(file_age), agent.pid,
                 )
             except OSError as exc:
                 log.warning("Could not reset %s: %s", path, exc)

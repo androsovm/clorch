@@ -196,3 +196,106 @@ class TestStateManagerCleanup:
         assert (tmp_state_dir / "fresh.json").exists()
         # The stale file should be gone.
         assert not (tmp_state_dir / "stale.json").exists()
+
+
+# ------------------------------------------------------------------
+# reset_stale_permissions()
+# ------------------------------------------------------------------
+
+
+class TestResetStalePermissions:
+    """Tests for StateManager.reset_stale_permissions()."""
+
+    def test_no_reset_when_process_alive(self, tmp_state_dir, make_agent_state):
+        """WAITING_PERMISSION is NOT reset when PID is alive — permission is legitimately pending."""
+        import os
+
+        path = make_agent_state(
+            session_id="alive-perm",
+            status="WAITING_PERMISSION",
+            pid=os.getpid(),  # current process — guaranteed alive
+        )
+        # Backdate mtime so file_age > ttl
+        old_mtime = path.stat().st_mtime - 120
+        os.utime(path, (old_mtime, old_mtime))
+
+        mgr = StateManager(state_dir=tmp_state_dir)
+        mgr.reset_stale_permissions(ttl_seconds=30)
+
+        agent = mgr.get_agent("alive-perm")
+        assert agent is not None
+        assert agent.status == AgentStatus.WAITING_PERMISSION
+
+    def test_reset_when_process_dead(self, tmp_state_dir, make_agent_state):
+        """WAITING_PERMISSION is reset to IDLE when PID is dead."""
+        import os
+
+        path = make_agent_state(
+            session_id="dead-perm",
+            status="WAITING_PERMISSION",
+            pid=99999999,  # almost certainly not a real PID
+        )
+        old_mtime = path.stat().st_mtime - 120
+        os.utime(path, (old_mtime, old_mtime))
+
+        mgr = StateManager(state_dir=tmp_state_dir)
+        # Mock kill to raise ProcessLookupError (dead process)
+        with patch("os.kill", side_effect=ProcessLookupError):
+            mgr.reset_stale_permissions(ttl_seconds=30)
+
+        agent = mgr.get_agent("dead-perm")
+        assert agent is not None
+        assert agent.status == AgentStatus.IDLE
+
+    def test_no_reset_when_file_is_fresh(self, tmp_state_dir, make_agent_state):
+        """WAITING_PERMISSION is NOT reset when file age < ttl, even without PID."""
+        make_agent_state(
+            session_id="fresh-perm",
+            status="WAITING_PERMISSION",
+        )
+        # File was just created — mtime is fresh
+
+        mgr = StateManager(state_dir=tmp_state_dir)
+        mgr.reset_stale_permissions(ttl_seconds=30)
+
+        agent = mgr.get_agent("fresh-perm")
+        assert agent is not None
+        assert agent.status == AgentStatus.WAITING_PERMISSION
+
+    def test_reset_when_no_pid_and_stale(self, tmp_state_dir, make_agent_state):
+        """WAITING_PERMISSION without PID is reset after ttl (fallback behavior)."""
+        import os
+
+        path = make_agent_state(
+            session_id="no-pid-perm",
+            status="WAITING_PERMISSION",
+            pid=None,
+        )
+        old_mtime = path.stat().st_mtime - 120
+        os.utime(path, (old_mtime, old_mtime))
+
+        mgr = StateManager(state_dir=tmp_state_dir)
+        mgr.reset_stale_permissions(ttl_seconds=30)
+
+        agent = mgr.get_agent("no-pid-perm")
+        assert agent is not None
+        assert agent.status == AgentStatus.IDLE
+
+    def test_working_status_not_affected(self, tmp_state_dir, make_agent_state):
+        """Only WAITING_PERMISSION is reset, other statuses are untouched."""
+        import os
+
+        path = make_agent_state(
+            session_id="working-agent",
+            status="WORKING",
+            pid=None,
+        )
+        old_mtime = path.stat().st_mtime - 120
+        os.utime(path, (old_mtime, old_mtime))
+
+        mgr = StateManager(state_dir=tmp_state_dir)
+        mgr.reset_stale_permissions(ttl_seconds=30)
+
+        agent = mgr.get_agent("working-agent")
+        assert agent is not None
+        assert agent.status == AgentStatus.WORKING

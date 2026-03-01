@@ -36,6 +36,7 @@ def make_agent_state(tmp_state_dir):
         notification_message: str | None = None,
         activity_history: list[int] | None = None,
         tool_request_summary: str | None = None,
+        pid: int | None = None,
     ) -> Path:
         if activity_history is None:
             activity_history = [0, 1, 2, 3, 2, 1, 0, 3, 2, 1]
@@ -58,6 +59,7 @@ def make_agent_state(tmp_state_dir):
             "notification_message": notification_message,
             "activity_history": activity_history,
             "tool_request_summary": tool_request_summary,
+            "pid": pid,
         }
         path = tmp_state_dir / f"{session_id}.json"
         path.write_text(json.dumps(state))
