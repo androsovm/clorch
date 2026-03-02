@@ -122,7 +122,7 @@ def select_tmux_pane(agent: AgentState) -> bool:
     """
     if not agent.tmux_window:
         return False
-    tmux = TmuxSession()
+    tmux = TmuxSession(session_name=agent.tmux_session or None)
     if not (tmux.is_available() and tmux.exists()):
         return False
     target = f"{tmux.session}:{agent.tmux_window}"

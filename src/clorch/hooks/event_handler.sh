@@ -86,15 +86,17 @@ if [[ -z "${TERM_PROGRAM:-}" ]]; then
 fi
 TMUX_WINDOW=""
 TMUX_PANE=""
+TMUX_SESSION=""
 # Detect tmux window AND pane ONLY if Claude Code's tty is actually inside a tmux pane.
 # Plain `tmux display-message` returns whatever the last client sees, which is
 # wrong when the agent runs in an iTerm tab while a tmux server is up.
 _CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
 if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
-    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty} #{window_name} #{pane_index}' 2>/dev/null \
-        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2, $3; exit }')" || true
-    TMUX_WINDOW="${_TMUX_INFO%% *}"
-    TMUX_PANE="${_TMUX_INFO##* }"
+    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty} #{window_name} #{pane_index} #{session_name}' 2>/dev/null \
+        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2, $3, $4; exit }')" || true
+    TMUX_WINDOW="$(echo "$_TMUX_INFO" | awk '{print $1}')"
+    TMUX_PANE="$(echo "$_TMUX_INFO" | awk '{print $2}')"
+    TMUX_SESSION="$(echo "$_TMUX_INFO" | awk '{print $3}')"
 fi
 # Collect git data from CWD (branch name and dirty file count)
 GIT_BRANCH=""
@@ -117,6 +119,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --argjson pid "$PPID" \
     --arg tmux_win "${TMUX_WINDOW:-}" \
     --arg tmux_pane "${TMUX_PANE:-}" \
+    --arg tmux_sess "${TMUX_SESSION:-}" \
     --arg term_prog "${TERM_PROGRAM:-}" \
     --arg git_branch "$GIT_BRANCH" \
     --argjson git_dirty "${GIT_DIRTY:-0}" \
@@ -131,6 +134,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     .pid = $pid |
     .tmux_window = $tmux_win |
     .tmux_pane = $tmux_pane |
+    .tmux_session = $tmux_sess |
     if .term_program == null or .term_program == "" then .term_program = $term_prog else . end |
     if (.git_branch == null or .git_branch == "") and $git_branch != "" then .git_branch = $git_branch else . end |
     if (.git_dirty_count == null) and $git_branch != "" then .git_dirty_count = $git_dirty else . end |
@@ -160,6 +164,7 @@ case "$EVENT" in
             --argjson pid "$PPID" \
             --arg tmux_win "${TMUX_WINDOW:-}" \
             --arg tmux_pane "${TMUX_PANE:-}" \
+            --arg tmux_sess "${TMUX_SESSION:-}" \
             --arg term_prog "${TERM_PROGRAM:-}" \
             --arg git_branch "$GIT_BRANCH" \
             --argjson git_dirty "${GIT_DIRTY:-0}" \
@@ -179,6 +184,7 @@ case "$EVENT" in
                 pid: $pid,
                 tmux_window: $tmux_win,
                 tmux_pane: $tmux_pane,
+                tmux_session: $tmux_sess,
                 term_program: $term_prog,
                 git_branch: $git_branch,
                 git_dirty_count: $git_dirty
