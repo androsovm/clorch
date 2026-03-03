@@ -179,10 +179,16 @@ def build_action_queue(agents: list[AgentState]) -> list[ActionItem]:
     """Build the action queue from agents needing attention.
 
     Filters to attention agents, sorts PERM > WAIT > ERR, assigns
-    letters ``a``–``z`` (max 26 items).
+    letters ``a``–``z`` (max 26 items).  Within the same status tier,
+    tmux-reachable agents (``tmux_window`` set) are listed first so
+    pressing ``y`` auto-focuses an agent that can be approved via
+    send-keys.
     """
     attention = [a for a in agents if a.status in ATTENTION_STATUSES]
-    attention.sort(key=lambda a: _ACTION_PRIORITY.get(a.status, 99))
+    attention.sort(key=lambda a: (
+        _ACTION_PRIORITY.get(a.status, 99),
+        0 if a.tmux_window else 1,
+    ))
 
     items: list[ActionItem] = []
     for i, agent in enumerate(attention[:26]):

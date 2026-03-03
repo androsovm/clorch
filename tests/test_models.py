@@ -368,6 +368,42 @@ class TestBuildActionQueue:
         assert len(items) == 26
         assert items[-1].letter == "z"
 
+    def test_tmux_reachable_agents_sorted_first_within_perm(self):
+        """PERM agents with tmux_window come before those without."""
+        agents = [
+            AgentState(
+                session_id="no-tmux",
+                status=AgentStatus.WAITING_PERMISSION,
+            ),
+            AgentState(
+                session_id="in-tmux",
+                status=AgentStatus.WAITING_PERMISSION,
+                tmux_window="my-win",
+                tmux_session="sess",
+            ),
+        ]
+        items = build_action_queue(agents)
+        assert items[0].agent.session_id == "in-tmux"
+        assert items[1].agent.session_id == "no-tmux"
+
+    def test_tmux_sorting_does_not_change_cross_tier_order(self):
+        """tmux sorting only applies within the same status tier."""
+        agents = [
+            AgentState(
+                session_id="ask-tmux",
+                status=AgentStatus.WAITING_ANSWER,
+                tmux_window="win",
+            ),
+            AgentState(
+                session_id="perm-no-tmux",
+                status=AgentStatus.WAITING_PERMISSION,
+            ),
+        ]
+        items = build_action_queue(agents)
+        # PERM always before WAIT regardless of tmux
+        assert items[0].agent.session_id == "perm-no-tmux"
+        assert items[1].agent.session_id == "ask-tmux"
+
     def test_summary_from_notification_message(self):
         """Summary is taken from notification_message."""
         agents = [
