@@ -652,7 +652,8 @@ class OrchestratorApp(App):
         if agent.tmux_window:
             tmux = TmuxSession(session_name=agent.tmux_session or None)
             if tmux.is_available() and tmux.exists():
-                target = tmux.get_pane_target(agent.tmux_window, agent.tmux_pane or "0")
+                window_target = agent.tmux_window_index or agent.tmux_window
+                target = tmux.get_pane_target(window_target, agent.tmux_pane or "0")
                 ok = tmux.send_keys(target, key, literal=True)
                 if ok:
                     tmux.send_keys(target, "Enter")
