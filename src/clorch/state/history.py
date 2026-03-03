@@ -14,6 +14,11 @@ _MAX_DISPLAY_LEN = 80
 _PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 
+def _sanitize(text: str) -> str:
+    """Collapse whitespace and newlines into a single-line display name."""
+    return " ".join(text.split())[:_MAX_DISPLAY_LEN]
+
+
 class HistoryResolver:
     """Look up session display names from Claude Code data.
 
@@ -64,7 +69,7 @@ class HistoryResolver:
                     sid = entry.get("sessionId")
                     display = entry.get("display")
                     if sid and display and sid not in cache:
-                        cache[sid] = display[:_MAX_DISPLAY_LEN]
+                        cache[sid] = _sanitize(display)
         except OSError as exc:
             log.warning("Could not read history file %s: %s", self._path, exc)
             return
@@ -111,7 +116,7 @@ class HistoryResolver:
                     if entry.get("type") == "custom-title":
                         ct = entry.get("customTitle", "")
                         if ct:
-                            title = ct[:_MAX_DISPLAY_LEN]
+                            title = _sanitize(ct)
         except OSError:
             pass
 

@@ -23,12 +23,10 @@ class ListHeader(Static):
         text = Text()
         # Col 1: accent (2) + Col 2: num (3) + separator (1) = 6 chars
         text.append("      ", style="dim")
-        # Col 3: project name (12)
-        text.append(f"{'PROJECT':<12s}", style=f"dim {GREY}")
-        # Col 3a: session name (48)
-        text.append(f"{'SESSION':<48s}", style=f"dim {GREY}")
-        # Col 3b: git branch (10)
-        text.append(f"{'BRANCH':<10s}", style=f"dim {GREY}")
+        # Col 3: project name (12) + separator (1)
+        text.append(f"{'PROJECT':<12s} ", style=f"dim {GREY}")
+        # Col 3a: session name (30) + separator (1)
+        text.append(f"{'SESSION':<30s} ", style=f"dim {GREY}")
         # Col 4: status (1 space + 8)
         text.append(f" {'STATUS':<8s}", style=f"dim {GREY}")
         # Col 4b: stale (5)
@@ -41,7 +39,9 @@ class ListHeader(Static):
         text.append(f"{'#E':>3s}", style=f"dim {GREY}")
         # Col 8: uptime (8)
         text.append(f"{'UPTIME':>8s}", style=f"dim {GREY}")
-        # Col 9: sparkline (2 space + 10)
+        # Col 9: git branch (1 space + 10)
+        text.append(f" {'BRANCH':<10s}", style=f"dim {GREY}")
+        # Col 10: sparkline (2 space + 10)
         text.append(f"  {'ACTIVITY':<10s}", style=f"dim {GREY}")
         self.update(text)
 
@@ -154,7 +154,7 @@ class SessionRow(ListItem):
     _COL_ACCENT = 2     # "┃ " or "  "
     _COL_NUM = 3        # "[a]" or " 1 "
     _COL_PROJECT = 12   # project name padded
-    _COL_SESSION = 48   # session name padded
+    _COL_SESSION = 30   # session name padded
     _COL_BRANCH = 10    # git branch padded
     _COL_STATUS = 8     # ">>> WORK" / "[!] PERM" — symbol(3) + space + label(4)
     _COL_STALE = 5      # stale age indicator
@@ -164,10 +164,10 @@ class SessionRow(ListItem):
     _COL_UPTIME = 8     # "1h 23m" right-aligned
     _COL_SPARK = 10     # sparkline chars
 
-    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(12) + session(48)
-    # + branch(10) + status(1+8) + stale(5) + tool(1+12) + tcnt(4) + ecnt(3) + uptime(8)
-    # + sep(2) + sparkline(10)
-    _FIXED_PREFIX_WIDTH = 130
+    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(12) + sep(1)
+    # + session(30) + sep(1) + status(1+8) + stale(5) + tool(1+12) + tcnt(4) + ecnt(3)
+    # + uptime(8) + branch(1+10) + sep(2) + sparkline(10)
+    _FIXED_PREFIX_WIDTH = 115
 
     def _render_row(self) -> Text:
         """Render the row as Rich Text with fixed-width columns."""
@@ -202,29 +202,17 @@ class SessionRow(ListItem):
 
         text.append(" ", style="dim")
 
-        # Col 3: Project name (fixed 12 chars)
+        # Col 3: Project name (fixed 12 chars) + separator (1)
         project = agent.project_name or agent.session_id[:12]
         if agent.subagent_count > 0:
             project = f"{project} [{agent.subagent_count}s]"
         text.append(f"{project:<{self._COL_PROJECT}s}"[:self._COL_PROJECT], style="bold white")
+        text.append(" ", style="dim")
 
-        # Col 3a: Session name (fixed 16 chars)
+        # Col 3a: Session name (fixed 30 chars) + separator (1)
         sess = (agent.session_name or "")[:self._COL_SESSION]
         text.append(f"{sess:<{self._COL_SESSION}s}"[:self._COL_SESSION], style="dim italic")
-
-        # Col 3b: Git branch (fixed 10 chars)
-        branch = agent.git_branch or ""
-        if branch:
-            branch_display = branch[:self._COL_BRANCH - 1]
-            if agent.git_dirty_count > 0:
-                # Truncate one more to fit the '*'
-                branch_display = branch[:self._COL_BRANCH - 2] + "*"
-            text.append(
-                f"{branch_display:<{self._COL_BRANCH}s}"[:self._COL_BRANCH],
-                style=f"bold {CYAN}" if agent.git_dirty_count == 0 else f"bold {YELLOW}",
-            )
-        else:
-            text.append(" " * self._COL_BRANCH, style="dim")
+        text.append(" ", style="dim")
 
         # Col 4: Status badge (fixed 8 chars: ">>> WORK", "[!] PERM")
         status_str = f"{symbol} {label:<4s}"
@@ -268,7 +256,20 @@ class SessionRow(ListItem):
         # Col 8: Uptime (right-aligned 8 chars)
         text.append(f"{agent.uptime:>{self._COL_UPTIME}s}", style="dim")
 
-        # Col 9: Sparkline (10 chars)
+        # Col 9: Git branch (1 space + fixed 10 chars)
+        branch = agent.git_branch or ""
+        if branch:
+            branch_display = branch[:self._COL_BRANCH - 1]
+            if agent.git_dirty_count > 0:
+                branch_display = branch[:self._COL_BRANCH - 2] + "*"
+            text.append(
+                f" {branch_display:<{self._COL_BRANCH}s}"[:self._COL_BRANCH + 1],
+                style=f"bold {CYAN}" if agent.git_dirty_count == 0 else f"bold {YELLOW}",
+            )
+        else:
+            text.append(" " * (self._COL_BRANCH + 1), style="dim")
+
+        # Col 10: Sparkline (10 chars)
         text.append("  ", style="dim")
         sparkline = self._render_sparkline(agent.activity_history)
         text.append_text(sparkline)

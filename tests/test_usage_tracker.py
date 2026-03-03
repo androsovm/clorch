@@ -16,8 +16,11 @@ def _make_jsonl_entry(
     output_tokens: int = 50,
     cache_creation_input_tokens: int = 10,
     cache_read_input_tokens: int = 20,
-    timestamp: str = "2026-03-02T12:00:00Z",
+    timestamp: str | None = None,
 ) -> str:
+    if timestamp is None:
+        from datetime import datetime, timezone
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     entry = {
         "timestamp": timestamp,
         "message": {
