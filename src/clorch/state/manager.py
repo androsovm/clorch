@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,8 @@ from clorch.state.history import HistoryResolver
 from clorch.state.models import AgentState, StatusSummary
 
 log = logging.getLogger(__name__)
+
+_VALID_SESSION_ID = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 class StateManager:
@@ -67,6 +70,8 @@ class StateManager:
 
     def get_agent(self, session_id: str) -> AgentState | None:
         """Return the agent matching *session_id*, or ``None``."""
+        if not _VALID_SESSION_ID.match(session_id):
+            return None
         path = self._state_dir / f"{session_id}.json"
         if not path.is_file():
             return None
