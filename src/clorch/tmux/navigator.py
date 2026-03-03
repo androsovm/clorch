@@ -119,13 +119,19 @@ def select_tmux_pane(agent: AgentState) -> bool:
 
     In iTerm CC mode, ``select-window`` causes iTerm to switch to the
     corresponding tab automatically.  Returns ``True`` on success.
+
+    Targets the window by index first (unambiguous), falling back to
+    name when no index is stored in the state file.
     """
     if not agent.tmux_window:
         return False
     tmux = TmuxSession(session_name=agent.tmux_session or None)
     if not (tmux.is_available() and tmux.exists()):
         return False
-    target = f"{tmux.session}:{agent.tmux_window}"
+    # Prefer window index — names can be duplicated across windows,
+    # and tmux refuses to select-window by an ambiguous name.
+    window_target = agent.tmux_window_index or agent.tmux_window
+    target = f"{tmux.session}:{window_target}"
     result = tmux.run_command("select-window", "-t", target, check=False)
     if result.returncode != 0:
         return False

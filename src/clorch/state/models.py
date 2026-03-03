@@ -40,6 +40,7 @@ class AgentState:
     tmux_window: str = ""
     tmux_pane: str = ""
     tmux_session: str = ""
+    tmux_window_index: str = ""
     term_program: str = ""
     tool_request_summary: str | None = None
 
@@ -95,6 +96,7 @@ class AgentState:
             tmux_window=data.get("tmux_window", ""),
             tmux_pane=data.get("tmux_pane", ""),
             tmux_session=data.get("tmux_session", ""),
+            tmux_window_index=data.get("tmux_window_index", ""),
             term_program=data.get("term_program", ""),
             tool_request_summary=data.get("tool_request_summary"),
         )

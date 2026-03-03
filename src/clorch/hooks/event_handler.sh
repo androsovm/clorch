@@ -87,15 +87,16 @@ fi
 TMUX_WINDOW=""
 TMUX_PANE=""
 TMUX_SESSION=""
+TMUX_WINDOW_INDEX=""
 # Detect tmux window AND pane ONLY if Claude Code's tty is actually inside a tmux pane.
 # Plain `tmux display-message` returns whatever the last client sees, which is
 # wrong when the agent runs in an iTerm tab while a tmux server is up.
 _CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
 if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
-    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty}|||#{window_name}|||#{pane_index}|||#{session_name}' 2>/dev/null \
-        | awk -v tty="/dev/$_CLAUDE_TTY" -F '\\|\\|\\|' '$1 == tty { print $2; print $3; print $4; exit }')" || true
+    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty}|||#{window_name}|||#{pane_index}|||#{session_name}|||#{window_index}' 2>/dev/null \
+        | awk -v tty="/dev/$_CLAUDE_TTY" -F '\\|\\|\\|' '$1 == tty { print $2; print $3; print $4; print $5; exit }')" || true
     if [[ -n "$_TMUX_INFO" ]]; then
-        { read -r TMUX_WINDOW; read -r TMUX_PANE; read -r TMUX_SESSION; } <<< "$_TMUX_INFO"
+        { read -r TMUX_WINDOW; read -r TMUX_PANE; read -r TMUX_SESSION; read -r TMUX_WINDOW_INDEX; } <<< "$_TMUX_INFO"
     fi
 fi
 # Collect git data from CWD (branch name and dirty file count)
@@ -120,6 +121,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg tmux_win "${TMUX_WINDOW:-}" \
     --arg tmux_pane "${TMUX_PANE:-}" \
     --arg tmux_sess "${TMUX_SESSION:-}" \
+    --arg tmux_widx "${TMUX_WINDOW_INDEX:-}" \
     --arg term_prog "${TERM_PROGRAM:-}" \
     --arg git_branch "$GIT_BRANCH" \
     --argjson git_dirty "${GIT_DIRTY:-0}" \
@@ -132,9 +134,10 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     if .error_count == null then .error_count = 0 else . end |
     if .activity_history == null then .activity_history = [0,0,0,0,0,0,0,0,0,0] else . end |
     .pid = $pid |
-    .tmux_window = $tmux_win |
-    .tmux_pane = $tmux_pane |
-    .tmux_session = $tmux_sess |
+    if $tmux_win != "" then .tmux_window = $tmux_win else . end |
+    if $tmux_pane != "" then .tmux_pane = $tmux_pane else . end |
+    if $tmux_sess != "" then .tmux_session = $tmux_sess else . end |
+    if $tmux_widx != "" then .tmux_window_index = $tmux_widx else . end |
     if .term_program == null or .term_program == "" then .term_program = $term_prog else . end |
     if (.git_branch == null or .git_branch == "") and $git_branch != "" then .git_branch = $git_branch else . end |
     if (.git_dirty_count == null) and $git_branch != "" then .git_dirty_count = $git_dirty else . end |
@@ -165,6 +168,7 @@ case "$EVENT" in
             --arg tmux_win "${TMUX_WINDOW:-}" \
             --arg tmux_pane "${TMUX_PANE:-}" \
             --arg tmux_sess "${TMUX_SESSION:-}" \
+            --arg tmux_widx "${TMUX_WINDOW_INDEX:-}" \
             --arg term_prog "${TERM_PROGRAM:-}" \
             --arg git_branch "$GIT_BRANCH" \
             --argjson git_dirty "${GIT_DIRTY:-0}" \
@@ -185,6 +189,7 @@ case "$EVENT" in
                 tmux_window: $tmux_win,
                 tmux_pane: $tmux_pane,
                 tmux_session: $tmux_sess,
+                tmux_window_index: $tmux_widx,
                 term_program: $term_prog,
                 git_branch: $git_branch,
                 git_dirty_count: $git_dirty
