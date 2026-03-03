@@ -62,10 +62,12 @@ class AgentDetail(Static):
         """Render PERM request detail with syntax highlighting."""
         text = Text()
 
-        # Header: [!] PERM  project_name  ToolName
+        # Header: [!] PERM  project_name  session_name  ToolName
         text.append("[!] PERM", style=f"bold {RED}")
         text.append("  ", style="dim")
         text.append(agent.project_name or agent.session_id[:12], style="bold white")
+        if agent.session_name:
+            text.append(f"  {agent.session_name[:40]}", style="dim italic")
         text.append("  ", style="dim")
         text.append(agent.last_tool or "?", style=f"bold {YELLOW}")
         text.append("\n")
@@ -101,8 +103,10 @@ class AgentDetail(Static):
 
         text = Text()
 
-        # Project name
+        # Project name + session name
         text.append(agent.project_name or agent.session_id[:12], style="bold white")
+        if agent.session_name:
+            text.append(f"  {agent.session_name[:60]}", style="dim italic")
         text.append("\n")
 
         # Status + Uptime

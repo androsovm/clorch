@@ -11,6 +11,7 @@ from pathlib import Path
 
 from clorch.config import STATE_DIR
 from clorch.constants import AgentStatus
+from clorch.state.history import HistoryResolver
 from clorch.state.models import AgentState, StatusSummary
 
 log = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class StateManager:
 
     def __init__(self, state_dir: Path = STATE_DIR) -> None:
         self._state_dir = state_dir
+        self._history = HistoryResolver()
 
     # ------------------------------------------------------------------
     # Core scanning
@@ -45,7 +47,15 @@ class StateManager:
                 continue
 
         agents.sort(key=lambda a: a.project_name.lower())
+        self._enrich_session_names(agents)
         return agents
+
+    def _enrich_session_names(self, agents: list[AgentState]) -> None:
+        """Fill ``session_name`` on each agent from Claude Code history."""
+        ids = {a.session_id for a in agents}
+        names = self._history.resolve_many(ids)
+        for agent in agents:
+            agent.session_name = names.get(agent.session_id, "")
 
     # ------------------------------------------------------------------
     # Queries
@@ -61,10 +71,12 @@ class StateManager:
         if not path.is_file():
             return None
         try:
-            return AgentState.from_json_file(path)
+            agent = AgentState.from_json_file(path)
         except (OSError, ValueError, KeyError) as exc:
             log.warning("Failed to read agent %s: %s", session_id, exc)
             return None
+        agent.session_name = self._history.resolve(agent.session_id)
+        return agent
 
     def verify_status(self, session_id: str, expected: "AgentStatus") -> bool:
         """Re-read the state file and confirm the agent is still in *expected* status.

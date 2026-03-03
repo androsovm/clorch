@@ -42,7 +42,10 @@ class AgentTable(DataTable):
         self._agents: list[AgentState] = []
 
     def on_mount(self) -> None:
-        self.add_columns("#", "PROJECT", "STATUS", "TOOL", "T", "E", "UP", "ACTIVITY", "MSG")
+        self.add_columns(
+            "#", "PROJECT", "SESSION", "STATUS", "TOOL",
+            "T", "E", "UP", "ACTIVITY", "MSG",
+        )
         self.cursor_type = "row"
         self.zebra_stripes = True
 
@@ -85,9 +88,12 @@ class AgentTable(DataTable):
             # Error count — highlight if non-zero
             err_text = Text(str(agent.error_count), style=f"bold {PINK}" if agent.error_count else "dim")
 
+            session_name = (agent.session_name or "")[:40]
+
             self.add_row(
                 str(i),
                 project_label,
+                Text(session_name, style="dim italic"),
                 status_text,
                 tool_text,
                 str(agent.tool_count),

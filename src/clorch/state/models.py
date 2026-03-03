@@ -18,6 +18,7 @@ class AgentState:
     status: AgentStatus = AgentStatus.IDLE
     cwd: str = ""
     project_name: str = ""
+    session_name: str = ""
     model: str = ""
     last_event: str = ""
     last_event_time: str = ""
@@ -75,6 +76,7 @@ class AgentState:
             status=status,
             cwd=data.get("cwd", ""),
             project_name=data.get("project_name", ""),
+            session_name=data.get("session_name", ""),
             model=data.get("model", ""),
             last_event=data.get("last_event", ""),
             last_event_time=data.get("last_event_time", ""),

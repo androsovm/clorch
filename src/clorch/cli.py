@@ -60,6 +60,7 @@ def _cmd_list(args: argparse.Namespace) -> None:
         table = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
         table.add_column("#", justify="right", style="dim", width=3)
         table.add_column("PROJECT", min_width=12)
+        table.add_column("SESSION", min_width=16, style="dim italic")
         table.add_column("STATUS", min_width=12)
         table.add_column("TOOL", min_width=6)
         table.add_column("UPTIME", justify="right", min_width=8)
@@ -71,9 +72,11 @@ def _cmd_list(args: argparse.Namespace) -> None:
             )
             status_str = f"[{color}]{symbol} {label}[/{color}]"
             tool_str = agent.last_tool or "-"
+            session = (agent.session_name or "")[:40]
             table.add_row(
                 str(idx),
                 agent.project_name or agent.session_id[:12],
+                session,
                 status_str,
                 tool_str,
                 agent.uptime,
@@ -82,7 +85,10 @@ def _cmd_list(args: argparse.Namespace) -> None:
         console.print(table)
 
     except ImportError:
-        header = f" {'#':>3}  {'PROJECT':<14} {'STATUS':<12} {'TOOL':<8} {'UPTIME':>8}"
+        header = (
+            f" {'#':>3}  {'PROJECT':<14} {'SESSION':<18}"
+            f" {'STATUS':<12} {'TOOL':<8} {'UPTIME':>8}"
+        )
         print(header)
         for idx, agent in enumerate(agents, start=1):
             symbol, label, _color = STATUS_DISPLAY.get(
@@ -92,7 +98,11 @@ def _cmd_list(args: argparse.Namespace) -> None:
             status_str = f"{symbol} {label}"
             tool_str = agent.last_tool or "-"
             name = agent.project_name or agent.session_id[:12]
-            print(f" {idx:>3}  {name:<14} {status_str:<12} {tool_str:<8} {agent.uptime:>8}")
+            session = (agent.session_name or "")[:18]
+            print(
+                f" {idx:>3}  {name:<14} {session:<18}"
+                f" {status_str:<12} {tool_str:<8} {agent.uptime:>8}"
+            )
 
 
 def _cmd_init(args: argparse.Namespace) -> None:

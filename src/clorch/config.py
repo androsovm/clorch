@@ -13,6 +13,7 @@ HOOKS_DATA_DIR = Path.home() / ".local" / "share" / "clorch" / "hooks"
 
 # Claude Code settings
 CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
+CLAUDE_HISTORY_PATH = Path.home() / ".claude" / "history.jsonl"
 
 # tmux
 TMUX_SESSION_NAME = os.environ.get("CLORCH_SESSION", "claude")
