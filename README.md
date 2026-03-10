@@ -1,7 +1,5 @@
 # Clorch
 
-> **Status: alpha** — works daily on the author's machine, API may change.
-
 Mission control for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions.
 
 ![Clorch TUI](docs/clorch-screenshot-new.png)
