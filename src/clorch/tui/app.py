@@ -834,7 +834,7 @@ class OrchestratorApp(App):
                 return None
         return tmux
 
-    def _open_tmux_tab(self, tmux, window: str) -> None:
+    def _open_tmux_tab(self, tmux, window: str, *, win_index: str | None = None) -> None:
         """Open a terminal tab attached to a specific tmux window.
 
         Uses ``exec tmux new-session`` (no ``-d``) so the shell in the
@@ -850,6 +850,8 @@ class OrchestratorApp(App):
         q_linked = shlex.quote(linked)
         q_session = shlex.quote(session)
         q_window = shlex.quote(window)
+        # Prefer index for select-window — immune to automatic-rename
+        q_win_target = win_index if win_index else q_window
         # Background monitor approach:
         # 1. Spawn a HUP-immune subshell that polls for the linked session
         # 2. exec replaces the shell with the tmux client
@@ -862,14 +864,18 @@ class OrchestratorApp(App):
             f"tmux kill-window -t {q_session}:{q_window} 2>/dev/null) & "
             f"tmux kill-session -t {q_linked} 2>/dev/null; "
             f"sleep 0.2; "
-            f"exec tmux new-session -t {q_session} -s {q_linked} "
-            f"\\; select-window -t :{q_window} "
-            f"\\; set-option destroy-unattached on"
+            f"tmux new-session -d -t {q_session} -s {q_linked}; "
+            f"tmux select-window -t {q_linked}:{q_win_target}; "
+            f"tmux set-option -t {q_linked} set-titles on; "
+            f"tmux set-option -t {q_linked} set-titles-string {q_window}; "
+            f"tmux set-hook -t {q_linked} client-attached "
+            f"'set-option destroy-unattached on'; "
+            f"exec tmux attach-session -t {q_linked}"
         )
 
         from clorch.terminal import get_backend
         backend = get_backend()
-        if not backend.open_tab(cmd):
+        if not backend.open_tab(cmd, title=window):
             # Terminal can't open tabs (e.g. Ghostty) — just switch to the
             # window inside the existing tmux session and bring terminal forward.
             tmux.select_window(window)
@@ -899,7 +905,13 @@ class OrchestratorApp(App):
                 if name not in existing:
                     tmux.add_window(name)
 
-            self._open_tmux_tab(tmux, name)
+            # Resolve window index — more robust than name which tmux may rename
+            win_index = None
+            for w in tmux.list_windows():
+                if w["name"] == name:
+                    win_index = w["index"]
+                    break
+            self._open_tmux_tab(tmux, name, win_index=win_index)
             self.notify(f"Opened window: {name}")
 
         self.push_screen(PromptScreen("New window name:", placeholder="backend"), on_result)

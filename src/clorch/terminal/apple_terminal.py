@@ -108,7 +108,7 @@ class AppleTerminalBackend:
         """Activate Terminal.app and bring it to the foreground."""
         _run_applescript('tell application "Terminal" to activate')
 
-    def open_tab(self, command: str) -> bool:
+    def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new Terminal.app window and run *command* in it."""
         safe_cmd = _escape(command)
         script = f'tell application "Terminal" to do script "{safe_cmd}"'
