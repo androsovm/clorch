@@ -47,7 +47,7 @@ class GhosttyBackend:
         """Activate Ghostty and bring it to the foreground."""
         _run_applescript('tell application "Ghostty" to activate')
 
-    def open_tab(self, command: str) -> bool:
+    def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new Ghostty tab and run *command* in it.
 
         Strategy chain:

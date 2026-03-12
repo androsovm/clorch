@@ -233,6 +233,7 @@ class TmuxSession:
         """Set session-level tmux options."""
         opts: list[tuple[str, str]] = [
             ("allow-rename", "off"),
+            ("automatic-rename", "off"),
             ("renumber-windows", "on"),
             ("status-style", "default"),
             ("status-left", " ORCH "),

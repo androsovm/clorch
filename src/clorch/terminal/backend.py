@@ -38,9 +38,10 @@ class TerminalBackend(Protocol):
         """Activate the terminal application and bring it to the foreground."""
         ...
 
-    def open_tab(self, command: str) -> bool:
+    def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new tab and run *command* in it.
 
+        If *title* is given, set the tab/session name.
         Returns ``True`` on success, ``False`` if the backend does not
         support programmatic tab creation.
         """

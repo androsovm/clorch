@@ -127,14 +127,18 @@ class ITermBackend:
             'to set frontmost to true'
         )
 
-    def open_tab(self, command: str) -> bool:
+    def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new iTerm tab and run *command* in it."""
         safe_cmd = _escape(command)
+        set_name = ""
+        if title:
+            safe_title = _escape(title)
+            set_name = f'\n                        set name to "{safe_title}"'
         script = f'''
             tell application "iTerm2"
                 tell current window
                     set newTab to (create tab with default profile)
-                    tell current session of newTab
+                    tell current session of newTab{set_name}
                         write text "{safe_cmd}"
                     end tell
                 end tell
