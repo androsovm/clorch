@@ -69,10 +69,14 @@ def parse_session_usage(
                 if not isinstance(usage, dict):
                     continue
 
-                tokens.input_tokens += usage.get("input_tokens", 0)
+                msg_input = usage.get("input_tokens", 0)
+                msg_cache_create = usage.get("cache_creation_input_tokens", 0)
+                msg_cache_read = usage.get("cache_read_input_tokens", 0)
+                tokens.input_tokens += msg_input
                 tokens.output_tokens += usage.get("output_tokens", 0)
-                tokens.cache_creation_input_tokens += usage.get("cache_creation_input_tokens", 0)
-                tokens.cache_read_input_tokens += usage.get("cache_read_input_tokens", 0)
+                tokens.cache_creation_input_tokens += msg_cache_create
+                tokens.cache_read_input_tokens += msg_cache_read
+                tokens.last_input = msg_input + msg_cache_create + msg_cache_read
                 message_count += 1
 
                 # Track model (use latest)
