@@ -3,17 +3,28 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from textual.app import ComposeResult
-from textual.widgets import ListView, ListItem, Static
-from textual.message import Message
 from rich.text import Text
+from textual.app import ComposeResult
+from textual.message import Message
+from textual.widgets import ListItem, ListView, Static
 
-from clorch.state.models import AgentState, ActionItem
-from clorch.terminal.detect import get_terminal_label, normalize_term_program
 from clorch.constants import (
-    AgentStatus, STATUS_DISPLAY, SPARKLINE_CHARS, BRAILLE_SPINNER,
-    CYAN, GREEN, GREY, PINK, RED, YELLOW,
+    BRAILLE_SPINNER,
+    CONTEXT_WINDOW_CAPACITY,
+    CYAN,
+    GREEN,
+    GREY,
+    PINK,
+    RED,
+    SPARKLINE_CHARS,
+    STATUS_DISPLAY,
+    YELLOW,
+    AgentStatus,
+    context_pct_color,
 )
+from clorch.state.models import ActionItem, AgentState
+from clorch.terminal.detect import get_terminal_label, normalize_term_program
+from clorch.usage.models import SessionUsage
 
 
 class ListHeader(Static):
@@ -39,6 +50,8 @@ class ListHeader(Static):
         text.append(f"{'#E':>3s}", style=f"dim {GREY}")
         # Col 8: uptime (8)
         text.append(f"{'UPTIME':>8s}", style=f"dim {GREY}")
+        # Col 8b: context window % (6 chars: 1 space + 4 + 1)
+        text.append(f" {'CTX':>4s} ", style=f"dim {GREY}")
         # Col 9: git branch (1 space + 10)
         text.append(f" {'BRANCH':<10s}", style=f"dim {GREY}")
         # Col 10: sparkline (2 space + 10)
@@ -102,11 +115,13 @@ class SessionRow(ListItem):
     }
     """
 
-    def __init__(self, agent: AgentState, row_num: int, dim: bool = False, **kwargs) -> None:
+    def __init__(self, agent: AgentState, row_num: int, dim: bool = False,
+                 ctx_pct: int = -1, **kwargs) -> None:
         super().__init__(**kwargs)
         self.agent = agent
         self._row_num = row_num
         self._dim = dim
+        self._ctx_pct = ctx_pct  # -1 = no data
         self._action: ActionItem | None = None
         self._action_focused: bool = False
         self._anim_frame: int = 0
@@ -134,12 +149,15 @@ class SessionRow(ListItem):
             if self.agent.status in (AgentStatus.WORKING, AgentStatus.WAITING_PERMISSION):
                 self._refresh_display()
 
-    def update_row(self, agent: AgentState, row_num: int, dim: bool | None = None) -> None:
+    def update_row(self, agent: AgentState, row_num: int, dim: bool | None = None,
+                   ctx_pct: int | None = None) -> None:
         """Update the row with new agent data."""
         self.agent = agent
         self._row_num = row_num
         if dim is not None:
             self._dim = dim
+        if ctx_pct is not None:
+            self._ctx_pct = ctx_pct
         self._refresh_display()
 
     def _refresh_display(self) -> None:
@@ -162,12 +180,13 @@ class SessionRow(ListItem):
     _COL_TCNT = 4       # tool count right-aligned
     _COL_ECNT = 3       # error count right-aligned
     _COL_UPTIME = 8     # "1h 23m" right-aligned
+    _COL_CTX = 6         # context % " 52% " or "  -  "
     _COL_SPARK = 10     # sparkline chars
 
     # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(16) + sep(1)
     # + session(30) + sep(1) + status(1+8) + stale(5) + tool(1+12) + tcnt(4) + ecnt(3)
-    # + uptime(8) + branch(1+10) + sep(2) + sparkline(10)
-    _FIXED_PREFIX_WIDTH = 119
+    # + uptime(8) + ctx(6) + branch(1+10) + sep(2) + sparkline(10)
+    _FIXED_PREFIX_WIDTH = 125
 
     def _render_row(self) -> Text:
         """Render the row as Rich Text with fixed-width columns."""
@@ -255,6 +274,14 @@ class SessionRow(ListItem):
 
         # Col 8: Uptime (right-aligned 8 chars)
         text.append(f"{agent.uptime:>{self._COL_UPTIME}s}", style="dim")
+
+        # Col 8b: Context window % (6 chars)
+        if self._ctx_pct < 0:
+            text.append(f"{'–':>5s} ", style="dim")
+        else:
+            pct = min(self._ctx_pct, 100)
+            text.append(f"{pct:>4d}%", style=f"bold {context_pct_color(float(pct))}")
+            text.append(" ", style="dim")
 
         # Col 9: Git branch (1 space + fixed 10 chars)
         branch = agent.git_branch or ""
@@ -366,6 +393,7 @@ class SessionList(ListView):
         super().__init__(**kwargs)
         self._agents: list[AgentState] = []
         self._action_map: dict[str, ActionItem] = {}  # session_id -> ActionItem
+        self._usage_map: dict[str, SessionUsage] = {}
         self._focused_letter: str | None = None
         # Mapping: child index → agent index (None for separators)
         self._child_to_agent: list[int | None] = []
@@ -455,6 +483,18 @@ class SessionList(ListView):
 
         return ordered, child_map, dim_flags, separators
 
+    def set_usage_map(self, usage_sessions: dict[str, SessionUsage]) -> None:
+        """Set per-session usage data."""
+        self._usage_map = usage_sessions
+
+    def _ctx_pct_for(self, session_id: str) -> int:
+        """Return context window % for a session, or -1 if no data."""
+        su = self._usage_map.get(session_id)
+        if su is None:
+            return -1
+        pct = su.tokens.context_window_pct(CONTEXT_WINDOW_CAPACITY)
+        return int(pct) if pct > 0 else -1
+
     def update_agents(self, agents: list[AgentState]) -> None:
         """Refresh the list with grouped terminal sorting.
 
@@ -478,7 +518,8 @@ class SessionList(ListView):
                     agent = ordered[agent_num]
                     agent_num += 1
                     row_num = agent_num  # 1-based
-                    child.update_row(agent, row_num, dim=dim_flags[agent_num - 1])
+                    child.update_row(agent, row_num, dim=dim_flags[agent_num - 1],
+                                     ctx_pct=self._ctx_pct_for(agent.session_id))
                     action = self._action_map.get(agent.session_id)
                     child.set_action(action)
                     if action and self._focused_letter and action.letter == self._focused_letter:
@@ -513,7 +554,8 @@ class SessionList(ListView):
                 agent = ordered[agent_idx]
                 agent_num += 1
                 dim = dim_flags[agent_idx]
-                row = SessionRow(agent, agent_num, dim=dim)
+                row = SessionRow(agent, agent_num, dim=dim,
+                                 ctx_pct=self._ctx_pct_for(agent.session_id))
                 action = self._action_map.get(agent.session_id)
                 if action:
                     row.set_action(action)

@@ -37,6 +37,52 @@ class TestTokenUsage:
         result = a.__iadd__(b)
         assert result is a
 
+    def test_last_input_default(self):
+        t = TokenUsage()
+        assert t.last_input == 0
+
+    def test_iadd_last_input_overwrites(self):
+        """last_input takes the latest non-zero value, not accumulated."""
+        a = TokenUsage(last_input=50_000)
+        b = TokenUsage(last_input=80_000)
+        a += b
+        assert a.last_input == 80_000
+
+    def test_iadd_last_input_preserves_when_other_zero(self):
+        a = TokenUsage(last_input=50_000)
+        b = TokenUsage(last_input=0)
+        a += b
+        assert a.last_input == 50_000
+
+    def test_context_window_pct_basic(self):
+        t = TokenUsage(last_input=100_000)
+        assert t.context_window_pct(200_000) == 50.0
+
+    def test_context_window_pct_capped_at_100(self):
+        t = TokenUsage(last_input=300_000)
+        assert t.context_window_pct(200_000) == 100.0
+
+    def test_context_window_pct_zero_last_input(self):
+        t = TokenUsage(last_input=0)
+        assert t.context_window_pct(200_000) == 0.0
+
+    def test_context_window_pct_zero_capacity(self):
+        t = TokenUsage(last_input=100_000)
+        assert t.context_window_pct(0) == 0.0
+
+    def test_context_window_pct_exact_capacity(self):
+        t = TokenUsage(last_input=200_000)
+        assert t.context_window_pct(200_000) == 100.0
+
+    def test_context_window_pct_small_values(self):
+        t = TokenUsage(last_input=1)
+        pct = t.context_window_pct(200_000)
+        assert 0.0 < pct < 1.0
+
+    def test_context_window_pct_negative_capacity(self):
+        t = TokenUsage(last_input=100_000)
+        assert t.context_window_pct(-1) == 0.0
+
 
 class TestSessionUsage:
     def test_defaults(self):

@@ -76,3 +76,15 @@ BRAILLE_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 # Global animation tick interval (seconds)
 ANIM_INTERVAL = 0.25
+
+# Context window capacity (tokens) for Claude models
+CONTEXT_WINDOW_CAPACITY = 200_000
+
+
+def context_pct_color(pct: float) -> str:
+    """Return color hex for a context window percentage."""
+    if pct >= 80:
+        return RED
+    if pct >= 60:
+        return YELLOW
+    return GREEN

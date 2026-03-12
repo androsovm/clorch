@@ -3,17 +3,29 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from textual.widgets import Static
 from rich.text import Text
+from textual.widgets import Static
 
-from clorch.state.models import AgentState
 from clorch.constants import (
-    AgentStatus, STATUS_DISPLAY, SPARKLINE_CHARS,
-    CYAN, GREEN, GREY, PINK, RED, YELLOW,
+    CONTEXT_WINDOW_CAPACITY,
+    CYAN,
+    GREEN,
+    GREY,
+    PINK,
+    RED,
+    SPARKLINE_CHARS,
+    STATUS_DISPLAY,
+    YELLOW,
+    AgentStatus,
+    context_pct_color,
 )
+from clorch.state.models import AgentState
+from clorch.usage.models import SessionUsage
 
 # Label column width for alignment
 _LABEL_W = 12
+# Context window gauge bar width
+_CTX_GAUGE_W = 16
 
 
 class AgentDetail(Static):
@@ -27,7 +39,7 @@ class AgentDetail(Static):
     DEFAULT_CSS = """
     AgentDetail {
         height: auto;
-        max-height: 10;
+        max-height: 12;
         padding: 0 1;
     }
     """
@@ -35,7 +47,7 @@ class AgentDetail(Static):
     def __init__(self, **kwargs) -> None:
         super().__init__("", **kwargs)
         self._agent: AgentState | None = None
-        self._session_usage: object | None = None  # SessionUsage from usage tracker
+        self._session_usage: SessionUsage | None = None
 
     def set_usage(self, session_usage) -> None:
         """Set per-agent usage data (SessionUsage or None)."""
@@ -202,6 +214,18 @@ class AgentDetail(Static):
             if su.cost >= 0.01:
                 text.append("  ~$", style="dim")
                 text.append(f"{su.cost:.2f}", style=f"bold {GREEN}")
+            text.append("\n")
+
+            # Context window gauge (last message = current context size)
+            pct = su.tokens.context_window_pct(CONTEXT_WINDOW_CAPACITY)
+            filled = round(pct / 100 * _CTX_GAUGE_W)
+            bar = "\u2588" * filled + "\u2591" * (_CTX_GAUGE_W - filled)
+            bar_color = context_pct_color(pct)
+            text.append(f"{'Context':<{_LABEL_W}s}", style=f"dim {GREY}")
+            text.append(f"[{bar}]", style=bar_color)
+            text.append(f" {pct:.0f}%", style=f"bold {bar_color}")
+            if agent.compact_count:
+                text.append(f" ({agent.compact_count}c)", style=f"dim {PINK}")
             text.append("\n")
 
         # Extended sparkline (use all available history, up to 20 chars)
