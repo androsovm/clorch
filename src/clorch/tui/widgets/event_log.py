@@ -7,7 +7,7 @@ from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from clorch.constants import GREY
+from clorch.constants import GREY, THEME
 
 MAX_EVENTS = 200
 
@@ -28,15 +28,16 @@ class EventLog(VerticalScroll):
         message: str,
         color: str,
     ) -> None:
+        hex_color = THEME.get(color, color)
         now = datetime.now(timezone.utc).strftime("%H:%M:%S")
         text = Text()
         text.append(now, style=f"dim {GREY}")
         text.append("  ")
         text.append(f"{agent_name:<12s}", style="white")
         text.append("  ")
-        text.append(icon, style=color)
+        text.append(icon, style=hex_color)
         text.append(" ")
-        text.append(message, style=color)
+        text.append(message, style=hex_color)
 
         entry = Static(text, classes="event-entry event-new")
         children = self.query(".event-entry")
