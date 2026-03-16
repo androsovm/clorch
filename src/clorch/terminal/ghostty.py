@@ -5,6 +5,7 @@ System Events menu clicks + keystrokes (requires Accessibility
 permission for ``osascript``).  Falls back gracefully when
 Accessibility is not granted.
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,9 @@ def _run_applescript(script: str) -> tuple[bool, str]:
     try:
         result = subprocess.run(
             ["osascript", "-e", script],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode != 0:
             log.debug("AppleScript stderr: %s", result.stderr.strip())
@@ -47,7 +50,7 @@ class GhosttyBackend:
         """Activate Ghostty and bring it to the foreground."""
         _run_applescript('tell application "Ghostty" to activate')
 
-    def open_tab(self, command: str) -> bool:
+    def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new Ghostty tab and run *command* in it.
 
         Strategy chain:
@@ -58,6 +61,8 @@ class GhosttyBackend:
 
         Returns ``False`` only if both strategies fail.
         """
+        if title:
+            command = f"printf '\\033]0;{title}\\033\\\\' && {command}"
         if self._open_tab_applescript(command):
             return True
         log.debug("AppleScript tab failed, falling back to new window")
@@ -99,9 +104,9 @@ class GhosttyBackend:
         """Fallback: open a new Ghostty window with *command*."""
         try:
             subprocess.run(
-                ["open", "-na", "Ghostty", "--args",
-                 "-e", "/bin/zsh", "-c", command],
-                capture_output=True, timeout=5,
+                ["open", "-na", "Ghostty", "--args", "-e", "/bin/zsh", "-c", command],
+                capture_output=True,
+                timeout=5,
             )
             return True
         except (subprocess.TimeoutExpired, OSError) as exc:
