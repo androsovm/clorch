@@ -50,7 +50,6 @@ class GhosttyBackend:
         """Activate Ghostty and bring it to the foreground."""
         _run_applescript('tell application "Ghostty" to activate')
 
-    # TODO: title parameter not yet implemented
     def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new Ghostty tab and run *command* in it.
 
@@ -62,6 +61,8 @@ class GhosttyBackend:
 
         Returns ``False`` only if both strategies fail.
         """
+        if title:
+            command = f"printf '\\033]0;{title}\\033\\\\' && {command}"
         if self._open_tab_applescript(command):
             return True
         log.debug("AppleScript tab failed, falling back to new window")

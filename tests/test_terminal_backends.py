@@ -182,6 +182,24 @@ class TestAppleTerminalBackend:
         assert result is True
         assert "do script" in mock.call_args[0][0]
 
+    def test_open_tab_with_title(self):
+        backend = AppleTerminalBackend()
+        with patch("clorch.terminal.apple_terminal._run_applescript") as mock:
+            result = backend.open_tab("echo hello", title="my-agent")
+        assert result is True
+        script = mock.call_args[0][0]
+        # The escape sequence gets double-escaped by _escape for AppleScript
+        assert "my-agent" in script
+        assert "033]0;" in script
+
+    def test_open_tab_without_title(self):
+        backend = AppleTerminalBackend()
+        with patch("clorch.terminal.apple_terminal._run_applescript") as mock:
+            result = backend.open_tab("echo hello")
+        assert result is True
+        script = mock.call_args[0][0]
+        assert "033]0;" not in script
+
     def test_supports_control_mode(self):
         backend = AppleTerminalBackend()
         assert backend.supports_control_mode() is False
@@ -220,6 +238,23 @@ class TestGhosttyBackend:
         backend = GhosttyBackend()
         with patch("subprocess.run", side_effect=OSError("not found")):
             assert backend.open_tab("echo hello") is False
+
+    def test_open_tab_with_title_prepends_escape(self):
+        backend = GhosttyBackend()
+        with patch.object(backend, "_open_tab_applescript", return_value=True) as mock:
+            result = backend.open_tab("echo hello", title="my-agent")
+        assert result is True
+        cmd = mock.call_args[0][0]
+        assert cmd.startswith("printf '\\033]0;my-agent\\033\\\\'")
+        assert "echo hello" in cmd
+
+    def test_open_tab_without_title_no_escape(self):
+        backend = GhosttyBackend()
+        with patch.object(backend, "_open_tab_applescript", return_value=True) as mock:
+            result = backend.open_tab("echo hello")
+        assert result is True
+        cmd = mock.call_args[0][0]
+        assert "\\033]0;" not in cmd
 
     def test_supports_control_mode(self):
         backend = GhosttyBackend()

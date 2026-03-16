@@ -111,9 +111,10 @@ class AppleTerminalBackend:
         """Activate Terminal.app and bring it to the foreground."""
         _run_applescript('tell application "Terminal" to activate')
 
-    # TODO: title is not supported by Terminal.app's 'do script' AppleScript
     def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new Terminal.app window and run *command* in it."""
+        if title:
+            command = f"printf '\\033]0;{title}\\033\\\\' && {command}"
         safe_cmd = _escape(command)
         script = f'tell application "Terminal" to do script "{safe_cmd}"'
         _run_applescript(script)
