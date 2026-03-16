@@ -145,6 +145,22 @@ class TestParseSessionUsage:
         assert usage is None
         assert offset == 0
 
+    def test_last_input_is_sum_of_last_message(self, tmp_jsonl_dir):
+        """last_input = input + cache_creation + cache_read from last msg."""
+        path = tmp_jsonl_dir / "session-lastinput.jsonl"
+        lines = [
+            _make_jsonl_entry(input_tokens=100, cache_creation_input_tokens=50,
+                              cache_read_input_tokens=30),
+            _make_jsonl_entry(input_tokens=200, cache_creation_input_tokens=80,
+                              cache_read_input_tokens=60),
+        ]
+        path.write_text("\n".join(lines) + "\n")
+
+        usage, _ = parse_session_usage(path)
+        assert usage is not None
+        # last_input should reflect only the last message: 200 + 80 + 60 = 340
+        assert usage.tokens.last_input == 340
+
     def test_cache_tokens(self, tmp_jsonl_dir):
         path = tmp_jsonl_dir / "session-cache.jsonl"
         line = _make_jsonl_entry(

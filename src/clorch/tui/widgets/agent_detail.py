@@ -7,7 +7,6 @@ from rich.text import Text
 from textual.widgets import Static
 
 from clorch.constants import (
-    CONTEXT_WINDOW_CAPACITY,
     CYAN,
     GREEN,
     GREY,
@@ -18,6 +17,7 @@ from clorch.constants import (
     YELLOW,
     AgentStatus,
     context_pct_color,
+    model_context_capacity,
 )
 from clorch.state.models import AgentState
 from clorch.usage.models import SessionUsage
@@ -49,7 +49,7 @@ class AgentDetail(Static):
         self._agent: AgentState | None = None
         self._session_usage: SessionUsage | None = None
 
-    def set_usage(self, session_usage) -> None:
+    def set_usage(self, session_usage: SessionUsage | None) -> None:
         """Set per-agent usage data (SessionUsage or None)."""
         self._session_usage = session_usage
         # Re-render if we have an agent displayed
@@ -217,7 +217,8 @@ class AgentDetail(Static):
             text.append("\n")
 
             # Context window gauge (last message = current context size)
-            pct = su.tokens.context_window_pct(CONTEXT_WINDOW_CAPACITY)
+            capacity = model_context_capacity(su.model)
+            pct = su.tokens.context_window_pct(capacity)
             filled = round(pct / 100 * _CTX_GAUGE_W)
             bar = "\u2588" * filled + "\u2591" * (_CTX_GAUGE_W - filled)
             bar_color = context_pct_color(pct)

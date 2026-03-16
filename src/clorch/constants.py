@@ -77,8 +77,31 @@ BRAILLE_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 # Global animation tick interval (seconds)
 ANIM_INTERVAL = 0.25
 
-# Context window capacity (tokens) for Claude models
+# Context window capacity (tokens) for Claude models.
+# Default for unknown models; use model_context_capacity() for model-aware lookup.
 CONTEXT_WINDOW_CAPACITY = 200_000
+
+# Known model prefix → context window size (tokens).
+_MODEL_CAPACITY: dict[str, int] = {
+    "claude-opus-4": 1_000_000,
+    "claude-sonnet-4": 200_000,
+    "claude-haiku-4": 200_000,
+    "claude-3-5-sonnet": 200_000,
+    "claude-3-5-haiku": 200_000,
+    "claude-3-opus": 200_000,
+}
+
+
+def model_context_capacity(model: str) -> int:
+    """Return context window capacity for a model string.
+
+    Matches against known prefixes, falling back to CONTEXT_WINDOW_CAPACITY.
+    """
+    if model:
+        for prefix, capacity in _MODEL_CAPACITY.items():
+            if model.startswith(prefix):
+                return capacity
+    return CONTEXT_WINDOW_CAPACITY
 
 
 def context_pct_color(pct: float) -> str:

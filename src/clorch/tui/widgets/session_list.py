@@ -10,7 +10,6 @@ from textual.widgets import ListItem, ListView, Static
 
 from clorch.constants import (
     BRAILLE_SPINNER,
-    CONTEXT_WINDOW_CAPACITY,
     CYAN,
     GREEN,
     GREY,
@@ -21,6 +20,7 @@ from clorch.constants import (
     YELLOW,
     AgentStatus,
     context_pct_color,
+    model_context_capacity,
 )
 from clorch.state.models import ActionItem, AgentState
 from clorch.terminal.detect import get_terminal_label, normalize_term_program
@@ -492,8 +492,8 @@ class SessionList(ListView):
         su = self._usage_map.get(session_id)
         if su is None:
             return -1
-        pct = su.tokens.context_window_pct(CONTEXT_WINDOW_CAPACITY)
-        return int(pct) if pct > 0 else -1
+        pct = su.tokens.context_window_pct(model_context_capacity(su.model))
+        return int(pct)
 
     def update_agents(self, agents: list[AgentState]) -> None:
         """Refresh the list with grouped terminal sorting.

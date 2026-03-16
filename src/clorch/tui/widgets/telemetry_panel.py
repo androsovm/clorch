@@ -5,7 +5,6 @@ from rich.text import Text
 from textual.widgets import Static
 
 from clorch.constants import (
-    CONTEXT_WINDOW_CAPACITY,
     CYAN,
     GREEN,
     GREY,
@@ -13,6 +12,7 @@ from clorch.constants import (
     SPARKLINE_CHARS,
     YELLOW,
     context_pct_color,
+    model_context_capacity,
 )
 from clorch.state.models import AgentState
 from clorch.usage.models import SessionUsage
@@ -69,7 +69,7 @@ class TelemetryPanel(Static):
             # Context gauge from real usage data, fallback to compact_count
             cc = agent.compact_count
             su = self._usage_map.get(agent.session_id)
-            pct = su.tokens.context_window_pct(CONTEXT_WINDOW_CAPACITY) if su else 0.0
+            pct = su.tokens.context_window_pct(model_context_capacity(su.model)) if su else 0.0
 
             if pct > 0:
                 filled = round(pct / 100 * _GAUGE_W)
