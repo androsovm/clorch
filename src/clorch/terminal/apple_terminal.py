@@ -1,4 +1,5 @@
 """Terminal.app backend — AppleScript control."""
+
 from __future__ import annotations
 
 import logging
@@ -14,7 +15,9 @@ def _run_applescript(script: str) -> str:
     try:
         result = subprocess.run(
             ["osascript", "-e", script],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return result.stdout.strip()
     except (subprocess.TimeoutExpired, OSError) as exc:
@@ -27,7 +30,7 @@ class AppleTerminalBackend:
 
     def get_tty_map(self) -> dict[str, str]:
         """Return ``{tty: "window_id,tab_idx"}`` for every Terminal.app tab."""
-        script = '''
+        script = """
             tell application "Terminal"
                 set output to ""
                 repeat with w in windows
@@ -43,7 +46,7 @@ class AppleTerminalBackend:
                 end repeat
                 return output
             end tell
-        '''
+        """
         raw = _run_applescript(script)
         result: dict[str, str] = {}
         for line in raw.splitlines():
@@ -61,7 +64,7 @@ class AppleTerminalBackend:
             return False
         w_id, t_idx = parts[0], parts[1]
 
-        script = f'''
+        script = f"""
             tell application "Terminal"
                 repeat with w in windows
                     if id of w is {w_id} then
@@ -73,7 +76,7 @@ class AppleTerminalBackend:
                 end repeat
                 return "not_found"
             end tell
-        '''
+        """
         return _run_applescript(script) == "found"
 
     def activate_by_name(self, name: str) -> bool:
@@ -108,6 +111,7 @@ class AppleTerminalBackend:
         """Activate Terminal.app and bring it to the foreground."""
         _run_applescript('tell application "Terminal" to activate')
 
+    # TODO: title is not supported by Terminal.app's 'do script' AppleScript
     def open_tab(self, command: str, *, title: str | None = None) -> bool:
         """Open a new Terminal.app window and run *command* in it."""
         safe_cmd = _escape(command)

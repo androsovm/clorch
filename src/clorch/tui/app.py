@@ -1,4 +1,5 @@
 """Main Textual TUI dashboard application — action-first control plane."""
+
 from __future__ import annotations
 
 from textual.app import App, ComposeResult
@@ -10,7 +11,12 @@ from textual.widgets import Input, Label, Static
 
 from clorch.state.manager import StateManager
 from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
-from clorch.constants import AgentStatus, ANIM_INTERVAL, TELEMETRY_HISTORY_LEN, TELEMETRY_BUCKET_TICKS
+from clorch.constants import (
+    AgentStatus,
+    ANIM_INTERVAL,
+    TELEMETRY_HISTORY_LEN,
+    TELEMETRY_BUCKET_TICKS,
+)
 from clorch.config import RULES_PATH
 from clorch.rules import RulesConfig, load_rules, save_rules, evaluate
 from clorch.tui.widgets.session_list import SessionList, ListHeader
@@ -220,6 +226,7 @@ class OrchestratorApp(App):
         self._perm_check_timer = self.set_interval(5, self._check_stale_permissions)
         self._anim_timer = self.set_interval(ANIM_INTERVAL, self._tick_animation)
         from clorch.config import USAGE_POLL_INTERVAL
+
         self._usage_timer = self.set_interval(USAGE_POLL_INTERVAL, self._poll_usage)
         self._load_rules()
         self._run_cleanup()
@@ -285,12 +292,16 @@ class OrchestratorApp(App):
                     self._skip_warned.discard(sid)
                 # Status transition events
                 if agent.status == AgentStatus.WORKING:
-                    event_log.write_event(agent.project_name, "\u25b6", agent.last_tool or "working", "green")
+                    event_log.write_event(
+                        agent.project_name, "\u25b6", agent.last_tool or "working", "green"
+                    )
                 elif agent.status == AgentStatus.IDLE:
                     event_log.write_event(agent.project_name, "\u25fc", "idle", "grey")
                 elif agent.status == AgentStatus.WAITING_PERMISSION:
                     summary_text = (agent.tool_request_summary or "")[:60]
-                    event_log.write_event(agent.project_name, "\u26a0", f"PERM: {summary_text}", "red")
+                    event_log.write_event(
+                        agent.project_name, "\u26a0", f"PERM: {summary_text}", "red"
+                    )
                 elif agent.status == AgentStatus.ERROR:
                     event_log.write_event(agent.project_name, "\u2717", "error", "pink")
             # Tool usage (delta > 0 and status stayed WORKING)
@@ -308,6 +319,7 @@ class OrchestratorApp(App):
             if old is not None and old != agent.status:
                 name = agent.project_name or agent.session_id[:12]
                 from clorch.constants import STATUS_DISPLAY
+
                 _, old_label, _ = STATUS_DISPLAY[old]
                 _, new_label, _ = STATUS_DISPLAY[agent.status]
                 severity = "warning" if agent.needs_attention else "information"
@@ -320,6 +332,7 @@ class OrchestratorApp(App):
         # Play sound alert (once per poll cycle, highest priority)
         if sound_status and self.query_one("#settings-panel", SettingsPanel).sound_enabled:
             from clorch.notifications.sound import play_status_sound
+
             play_status_sound(sound_status)
 
         # --- Extended history update (bucketed) ---
@@ -532,10 +545,14 @@ class OrchestratorApp(App):
                     self._approve_action(approvable[0])
                 elif approvable:
                     self._focused_action = approvable[0]
-                    self.query_one("#session-list", SessionList).set_action_focus(approvable[0].letter)
+                    self.query_one("#session-list", SessionList).set_action_focus(
+                        approvable[0].letter
+                    )
                     self._update_footer_mode()
                     name = approvable[0].agent.project_name or approvable[0].agent.session_id[:12]
-                    self.notify(f"Multiple PERMs — focused [{approvable[0].letter}] {name}. Press [y] again to approve, or select another.")
+                    self.notify(
+                        f"Multiple PERMs — focused [{approvable[0].letter}] {name}. Press [y] again to approve, or select another."
+                    )
                 else:
                     return  # no PERM items, let fall through to a-z
             event.prevent_default()
@@ -606,7 +623,9 @@ class OrchestratorApp(App):
 
         self._has_ever_approved = True
         self.notify(f"Approved: {name}")
-        self.query_one("#event-log-panel", EventLog).write_event(name, "\u2714", "approved", "green")
+        self.query_one("#event-log-panel", EventLog).write_event(
+            name, "\u2714", "approved", "green"
+        )
         self._clear_focused_action()
 
     def _deny_action(self, action: ActionItem) -> None:
@@ -645,6 +664,7 @@ class OrchestratorApp(App):
         table = self.query_one("#session-list", SessionList)
         if not table.is_agent_reachable(agent):
             from clorch.tui.widgets.session_list import _agent_terminal_group
+
             remote = _agent_terminal_group(agent)
             local = table._local_terminal
             self.notify(f"Cannot reach {name} from {local} (agent in {remote})", severity="warning")
@@ -691,7 +711,9 @@ class OrchestratorApp(App):
         self._has_ever_approved = True
         self.notify(f"Approved {approved}/{len(approvable)} permission requests")
         event_log = self.query_one("#event-log-panel", EventLog)
-        event_log.write_event("all", "\u2714", f"batch approved {approved}/{len(approvable)}", "green")
+        event_log.write_event(
+            "all", "\u2714", f"batch approved {approved}/{len(approvable)}", "green"
+        )
         self._clear_focused_action()
 
     def _select_agent_by_number(self, num: int) -> None:
@@ -718,8 +740,11 @@ class OrchestratorApp(App):
         with a warning.
         """
         from clorch.tmux.navigator import (
-            jump_to_tab, jump_to_tmux_tab, select_tmux_pane,
-            bring_terminal_to_front, pid_alive,
+            jump_to_tab,
+            jump_to_tmux_tab,
+            select_tmux_pane,
+            bring_terminal_to_front,
+            pid_alive,
         )
         from clorch.tmux.session import TmuxSession
 
@@ -729,6 +754,7 @@ class OrchestratorApp(App):
         table = self.query_one("#session-list", SessionList)
         if not table.is_agent_reachable(agent):
             from clorch.tui.widgets.session_list import _agent_terminal_group
+
             remote = _agent_terminal_group(agent)
             local = table._local_terminal
             self.notify(f"Cannot reach {name} from {local} (agent in {remote})", severity="warning")
@@ -763,6 +789,7 @@ class OrchestratorApp(App):
     def _apply_tmux_statusbar(self) -> None:
         """Apply clorch status bar options to an existing tmux session."""
         from clorch.tmux.session import TmuxSession
+
         tmux = TmuxSession()
         if tmux.is_available() and tmux.exists():
             tmux._apply_options()
@@ -771,6 +798,7 @@ class OrchestratorApp(App):
     def _init_header_tmux(self) -> None:
         """Set the tmux session name in the header bar."""
         from clorch.tmux.session import TmuxSession
+
         tmux = TmuxSession()
         if tmux.is_available() and tmux.exists():
             self.query_one("#header-bar", HeaderBar).set_tmux_session(tmux.session)
@@ -788,6 +816,7 @@ class OrchestratorApp(App):
         try:
             agents = self._manager.scan()
             from clorch.usage.parser import CLAUDE_PROJECTS_DIR
+
             if CLAUDE_PROJECTS_DIR.is_dir():
                 for agent in agents:
                     if not agent.cwd:
@@ -820,6 +849,7 @@ class OrchestratorApp(App):
         automatically if one doesn't exist yet.
         """
         from clorch.tmux.session import TmuxSession
+
         tmux = TmuxSession()
         if not tmux.is_available():
             self.notify("tmux not installed", severity="error")
@@ -837,11 +867,13 @@ class OrchestratorApp(App):
     def _open_tmux_tab(self, tmux, window: str, *, win_index: str | None = None) -> None:
         """Open a terminal tab attached to a specific tmux window.
 
-        Uses ``exec tmux new-session`` (no ``-d``) so the shell in the
-        new tab is replaced by the tmux client immediately.  A linked
-        session is created grouped with the main session and pinned to
-        *window*.  ``destroy-unattached`` is set via ``\\;`` *after*
-        the attach so the session isn't killed prematurely.
+        Creates a linked session grouped with the main session and pinned
+        to *window*.  Commands are run sequentially: kill stale session,
+        create a new detached linked session, select the target window,
+        set ``destroy-unattached`` via a client-attached hook, then
+        ``exec`` into ``tmux attach``.  A background monitor polls for
+        the linked session and cleans up the tmux window when the tab
+        is closed.
         """
         import shlex
 
@@ -851,7 +883,7 @@ class OrchestratorApp(App):
         q_session = shlex.quote(session)
         q_window = shlex.quote(window)
         # Prefer index for select-window — immune to automatic-rename
-        q_win_target = win_index if win_index else q_window
+        q_win_target = shlex.quote(win_index) if win_index else q_window
         # Background monitor approach:
         # 1. Spawn a HUP-immune subshell that polls for the linked session
         # 2. exec replaces the shell with the tmux client
@@ -859,7 +891,7 @@ class OrchestratorApp(App):
         #    destroy-unattached kills linked session →
         #    monitor detects it → kill-window cleans up the tmux window
         cmd = (
-            f"(trap '' HUP; while tmux has-session -t {q_linked} 2>/dev/null; "
+            f"(trap '' HUP; sleep 1; while tmux has-session -t {q_linked} 2>/dev/null; "
             f"do sleep 1; done; "
             f"tmux kill-window -t {q_session}:{q_window} 2>/dev/null) & "
             f"tmux kill-session -t {q_linked} 2>/dev/null; "
@@ -874,6 +906,7 @@ class OrchestratorApp(App):
         )
 
         from clorch.terminal import get_backend
+
         backend = get_backend()
         if not backend.open_tab(cmd, title=window):
             # Terminal can't open tabs (e.g. Ghostty) — just switch to the
@@ -883,10 +916,12 @@ class OrchestratorApp(App):
 
     def _prompt_new_window(self) -> None:
         """Show a modal prompt and create a new tmux window."""
+
         def on_result(name: str | None) -> None:
             if not name:
                 return
             from clorch.tmux.session import TmuxSession
+
             tmux = TmuxSession()
             if not tmux.is_available():
                 self.notify("tmux not installed", severity="error")
@@ -895,7 +930,12 @@ class OrchestratorApp(App):
             if not tmux.exists():
                 # Create session with this window as the first
                 tmux.run_command(
-                    "new-session", "-d", "-s", tmux.session, "-n", name,
+                    "new-session",
+                    "-d",
+                    "-s",
+                    tmux.session,
+                    "-n",
+                    name,
                 )
                 tmux._apply_options()
                 tmux._apply_keybindings()
@@ -929,6 +969,7 @@ class OrchestratorApp(App):
             return
 
         from clorch.tmux.navigator import map_agent_to_window
+
         window = map_agent_to_window(agent, tmux)
         if not window:
             self.notify(f"No tmux window for {agent.project_name}", severity="warning")
@@ -953,6 +994,7 @@ class OrchestratorApp(App):
             return
 
         from clorch.tmux.navigator import map_agent_to_window
+
         window = map_agent_to_window(agent, tmux)
         if not window:
             self.notify(f"No tmux window for {agent.project_name}", severity="warning")
@@ -960,7 +1002,10 @@ class OrchestratorApp(App):
 
         name = agent.project_name or agent.session_id[:12]
         result = tmux.run_command(
-            "kill-window", "-t", f"{tmux.session}:{window}", check=False,
+            "kill-window",
+            "-t",
+            f"{tmux.session}:{window}",
+            check=False,
         )
         if result.returncode == 0:
             self.notify(f"Killed window: {name}")
@@ -980,6 +1025,7 @@ class OrchestratorApp(App):
             return
 
         from clorch.tmux.navigator import map_agent_to_window
+
         window = map_agent_to_window(agent, tmux)
         if not window:
             self.notify(f"No tmux window for {agent.project_name}", severity="warning")

@@ -1,4 +1,5 @@
 """Tests for terminal backend implementations."""
+
 from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
@@ -96,6 +97,22 @@ class TestITermBackend:
         script = mock.call_args[0][0]
         assert "create tab" in script
         assert "echo hello" in script
+
+    def test_open_tab_with_title(self):
+        backend = ITermBackend()
+        with patch("clorch.terminal.iterm._run_applescript", return_value="") as mock:
+            result = backend.open_tab("echo hello", title="my-agent")
+        assert result is True
+        script = mock.call_args[0][0]
+        assert 'set name to "my-agent"' in script
+
+    def test_open_tab_without_title(self):
+        backend = ITermBackend()
+        with patch("clorch.terminal.iterm._run_applescript", return_value="") as mock:
+            result = backend.open_tab("echo hello")
+        assert result is True
+        script = mock.call_args[0][0]
+        assert "set name to" not in script
 
     def test_supports_control_mode(self):
         backend = ITermBackend()
@@ -215,4 +232,5 @@ class TestBackendProtocol:
     @pytest.mark.parametrize("cls", [ITermBackend, AppleTerminalBackend, GhosttyBackend])
     def test_is_terminal_backend(self, cls):
         from clorch.terminal.backend import TerminalBackend
+
         assert isinstance(cls(), TerminalBackend)
