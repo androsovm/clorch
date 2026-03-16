@@ -1,12 +1,21 @@
 """Telemetry panel — per-agent context gauge + activity sparkline."""
 from __future__ import annotations
 
-from textual.widgets import Static
 from rich.text import Text
+from textual.widgets import Static
 
+from clorch.constants import (
+    CYAN,
+    GREEN,
+    GREY,
+    RED,
+    SPARKLINE_CHARS,
+    YELLOW,
+    context_pct_color,
+    model_context_capacity,
+)
 from clorch.state.models import AgentState
-from clorch.constants import SPARKLINE_CHARS, TELEMETRY_HISTORY_LEN, CYAN, GREEN, GREY, RED, YELLOW
-
+from clorch.usage.models import SessionUsage
 
 # Gauge bar width
 _GAUGE_W = 8
@@ -21,6 +30,11 @@ class TelemetryPanel(Static):
 
     def __init__(self, **kwargs) -> None:
         super().__init__("", **kwargs)
+        self._usage_map: dict[str, SessionUsage] = {}
+
+    def set_usage_map(self, usage_sessions: dict[str, SessionUsage]) -> None:
+        """Set per-session usage data."""
+        self._usage_map = usage_sessions
 
     def update_agents(
         self,
@@ -33,6 +47,14 @@ class TelemetryPanel(Static):
             return
 
         text = Text()
+
+        # Column header
+        text.append(f"{'AGENT':<{_NAME_W}s} ", style=f"dim {GREY}")
+        text.append(f"{'CONTEXT':^{_GAUGE_W + 2}s}", style=f"dim {GREY}")
+        text.append("       ", style="dim")  # label gap
+        text.append("ACTIVITY", style=f"dim {GREY}")
+        text.append("\n")
+
         for i, agent in enumerate(agents):
             if i > 0:
                 text.append("\n")
@@ -44,21 +66,33 @@ class TelemetryPanel(Static):
             text.append(f"{name:<{_NAME_W}s}", style=name_style)
             text.append(" ")
 
-            # Gauge bar from compact_count: 0=empty, 5+=full
+            # Context gauge from real usage data, fallback to compact_count
             cc = agent.compact_count
-            filled = min(cc, _GAUGE_W)
-            if cc <= 1:
-                bar_color = GREEN
-            elif cc <= 3:
-                bar_color = YELLOW
+            su = self._usage_map.get(agent.session_id)
+            pct = su.tokens.context_window_pct(model_context_capacity(su.model)) if su else 0.0
+
+            if pct > 0:
+                filled = round(pct / 100 * _GAUGE_W)
+                bar_color = context_pct_color(pct)
+                label = f"{pct:.0f}%"
             else:
-                bar_color = RED
+                # Fallback: compact_count proxy
+                filled = min(cc, _GAUGE_W)
+                if cc <= 1:
+                    bar_color = GREEN
+                elif cc <= 3:
+                    bar_color = YELLOW
+                else:
+                    bar_color = RED
+                label = f"{cc}c"
 
             bar = "\u2588" * filled + "\u2591" * (_GAUGE_W - filled)
             text.append("[", style=f"dim {GREY}")
             text.append(bar, style=bar_color)
             text.append("]", style=f"dim {GREY}")
-            text.append(f" {cc}c", style=f"dim {GREY}")
+            text.append(f" {label}", style=f"dim {GREY}")
+            if pct > 0 and cc:
+                text.append(f" {cc}c", style=f"dim {GREY}")
             text.append("  ")
 
             # Sparkline from extended history

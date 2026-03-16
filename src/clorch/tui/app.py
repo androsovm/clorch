@@ -207,7 +207,7 @@ class OrchestratorApp(App):
                 detail.border_title = "Detail"
                 yield detail
                 telemetry = TelemetryPanel(id="telemetry-panel")
-                telemetry.border_title = "Telemetry"
+                telemetry.border_title = "Context & Activity"
                 yield telemetry
                 event_log = EventLog(id="event-log-panel")
                 event_log.border_title = "Events"
@@ -806,6 +806,10 @@ class OrchestratorApp(App):
         try:
             self._usage_summary = self._usage_tracker.poll(active_paths or None)
             self.query_one("#header-bar", HeaderBar).update_usage(self._usage_summary)
+            # Feed per-session usage to session list and telemetry panel
+            sessions = self._usage_summary.sessions if self._usage_summary else {}
+            self.query_one("#session-list", SessionList).set_usage_map(sessions)
+            self.query_one("#telemetry-panel", TelemetryPanel).set_usage_map(sessions)
         except Exception:
             pass
 
