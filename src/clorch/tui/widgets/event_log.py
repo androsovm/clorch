@@ -3,17 +3,23 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from textual.widgets import RichLog
 from rich.text import Text
+from textual.containers import VerticalScroll
+from textual.widgets import Static
 
 from clorch.constants import GREY
 
+MAX_EVENTS = 200
 
-class EventLog(RichLog):
-    """Scrolling event log with colored entries."""
+
+class EventLog(VerticalScroll):
+    """Scrolling event log with colored entries, newest on top."""
+
+    _event_count: int = 0
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(max_lines=200, auto_scroll=True, markup=False, wrap=True, **kwargs)
+        super().__init__(**kwargs)
+        self.can_focus = True
 
     def write_event(
         self,
@@ -31,4 +37,24 @@ class EventLog(RichLog):
         text.append(icon, style=color)
         text.append(" ")
         text.append(message, style=color)
-        self.write(text)
+
+        entry = Static(text, classes="event-entry event-new")
+        children = self.query(".event-entry")
+        if children:
+            self.mount(entry, before=children.first())
+        else:
+            self.mount(entry)
+        self.set_timer(1.5, lambda: entry.remove_class("event-new"))
+
+        self._event_count += 1
+        if self._event_count > MAX_EVENTS:
+            last = children.last()
+            if last is not None:
+                last.remove()
+                self._event_count -= 1
+
+    def clear(self) -> None:
+        """Remove all event entries."""
+        for child in self.query(".event-entry"):
+            child.remove()
+        self._event_count = 0

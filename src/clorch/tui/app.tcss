@@ -116,3 +116,14 @@ Screen {
     scrollbar-size-horizontal: 0;
     scrollbar-size-vertical: 0;
 }
+
+.event-entry {
+    height: auto;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+}
+
+.event-new {
+    background: #3B4252;
+}
