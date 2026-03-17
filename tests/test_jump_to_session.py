@@ -51,9 +51,11 @@ class TestJumpToSessionTmuxBranch:
         with (
             patch.object(type(app), "query_one", return_value=table_mock),
             patch("clorch.tmux.navigator.pid_alive", return_value=True),
-            patch("clorch.tmux.session.TmuxSession") as mock_tmux_cls,
+            patch("clorch.tmux.session.TmuxSession"),
             patch("clorch.tmux.navigator.jump_to_tmux_tab", return_value=tab_found) as mock_tab,
-            patch("clorch.tmux.navigator.select_tmux_pane", return_value=pane_selected) as mock_pane,
+            patch(
+                "clorch.tmux.navigator.select_tmux_pane", return_value=pane_selected
+            ) as mock_pane,
             patch("clorch.tmux.navigator.bring_terminal_to_front") as mock_front,
             patch("clorch.tmux.navigator.jump_to_tab", return_value=False),
         ):
@@ -119,7 +121,9 @@ class TestJumpToSessionTmuxBranch:
         """Agents without tmux_window bypass the tmux branch entirely."""
         app = _make_app()
         agent = _make_agent(tmux_window="")
-        mock_tab, mock_pane, mock_front = self._run(app, agent, tab_found=False, pane_selected=False)
+        mock_tab, mock_pane, mock_front = self._run(
+            app, agent, tab_found=False, pane_selected=False
+        )
 
         mock_tab.assert_not_called()
         mock_pane.assert_not_called()
@@ -135,3 +139,29 @@ class TestJumpToSessionTmuxBranch:
             if "Jumped" in (c[0][0] if c[0] else "")
         ]
         assert not jumped_calls
+
+
+class TestJumpToSessionDeadProcess:
+    """Dead-process path uses StateManager.remove_session() (not direct file access)."""
+
+    def test_dead_process_calls_remove_session(self):
+        """When the agent PID is dead, remove_session() is called on the manager."""
+        from clorch.tui.app import OrchestratorApp
+
+        app = object.__new__(OrchestratorApp)
+        app.notify = MagicMock()  # type: ignore[attr-defined]
+        app._manager = MagicMock()
+
+        agent = _make_agent(pid=99999)
+        table_mock = MagicMock()
+        table_mock.is_agent_reachable.return_value = True
+
+        with (
+            patch.object(type(app), "query_one", return_value=table_mock),
+            patch("clorch.tmux.navigator.pid_alive", return_value=False),
+        ):
+            app._jump_to_session(agent)
+
+        app._manager.remove_session.assert_called_once_with(agent.session_id)
+        app.notify.assert_called_once()
+        assert "dead" in app.notify.call_args[0][0]
