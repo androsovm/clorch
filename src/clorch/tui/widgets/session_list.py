@@ -27,17 +27,55 @@ from clorch.terminal.detect import get_terminal_label, normalize_term_program
 from clorch.usage.models import SessionUsage
 
 
+def _visible_columns(width: int) -> set[str]:
+    """Determine which optional columns fit in the given width.
+
+    Core columns (accent, num, project, status, stale, tool) always shown (~50 chars).
+    Optional columns are added from most to least important as width allows.
+    """
+    # Core: accent(2) + num(3) + sep(1) + project(16) + sep(1) + status(1+8) + stale(5)
+    #       + tool(1+12) = 50
+    core = 50
+    cols: set[str] = set()
+    budget = width - core
+
+    # Add columns in priority order (most important first)
+    col_costs = [
+        ("session", 31),    # session name (30 + 1 sep)
+        ("tcnt", 4),        # tool count
+        ("ecnt", 3),        # error count
+        ("uptime", 8),      # uptime
+        ("ctx", 6),         # context %
+        ("branch", 11),     # git branch (10 + 1 sep)
+        ("sparkline", 12),  # sparkline (10 + 2 sep)
+    ]
+    for name, cost in col_costs:
+        if budget >= cost:
+            cols.add(name)
+            budget -= cost
+    return cols
+
+
 class ListHeader(Static):
     """Column header row matching SessionRow column widths."""
 
     def on_mount(self) -> None:
+        self._render_header()
+
+    def on_resize(self) -> None:
+        self._render_header()
+
+    def _render_header(self) -> None:
+        width = (getattr(self.size, "width", 120) or 120)
+        cols = _visible_columns(width)
         text = Text()
         # Col 1: accent (2) + Col 2: num (3) + separator (1) = 6 chars
         text.append("      ", style="dim")
         # Col 3: project name (16) + separator (1)
         text.append(f"{'PROJECT':<16s} ", style=f"dim {GREY}")
         # Col 3a: session name (30) + separator (1)
-        text.append(f"{'SESSION':<30s} ", style=f"dim {GREY}")
+        if "session" in cols:
+            text.append(f"{'SESSION':<30s} ", style=f"dim {GREY}")
         # Col 4: status (1 space + 8)
         text.append(f" {'STATUS':<8s}", style=f"dim {GREY}")
         # Col 4b: stale (5)
@@ -45,17 +83,23 @@ class ListHeader(Static):
         # Col 5: tool (1 space + 12)
         text.append(f" {'TOOL':<12s}", style=f"dim {GREY}")
         # Col 6: tool count (4)
-        text.append(f"{'#T':>4s}", style=f"dim {GREY}")
+        if "tcnt" in cols:
+            text.append(f"{'#T':>4s}", style=f"dim {GREY}")
         # Col 7: error count (3)
-        text.append(f"{'#E':>3s}", style=f"dim {GREY}")
+        if "ecnt" in cols:
+            text.append(f"{'#E':>3s}", style=f"dim {GREY}")
         # Col 8: uptime (8)
-        text.append(f"{'UPTIME':>8s}", style=f"dim {GREY}")
+        if "uptime" in cols:
+            text.append(f"{'UPTIME':>8s}", style=f"dim {GREY}")
         # Col 8b: context window % (6 chars: 1 space + 4 + 1)
-        text.append(f" {'CTX':>4s} ", style=f"dim {GREY}")
+        if "ctx" in cols:
+            text.append(f" {'CTX':>4s} ", style=f"dim {GREY}")
         # Col 9: git branch (1 space + 10)
-        text.append(f" {'BRANCH':<10s}", style=f"dim {GREY}")
+        if "branch" in cols:
+            text.append(f" {'BRANCH':<10s}", style=f"dim {GREY}")
         # Col 10: sparkline (2 space + 10)
-        text.append(f"  {'ACTIVITY':<10s}", style=f"dim {GREY}")
+        if "sparkline" in cols:
+            text.append(f"  {'ACTIVITY':<10s}", style=f"dim {GREY}")
         self.update(text)
 
 
@@ -183,15 +227,35 @@ class SessionRow(ListItem):
     _COL_CTX = 6         # context % " 52% " or "  -  "
     _COL_SPARK = 10     # sparkline chars
 
-    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(16) + sep(1)
-    # + session(30) + sep(1) + status(1+8) + stale(5) + tool(1+12) + tcnt(4) + ecnt(3)
-    # + uptime(8) + ctx(6) + branch(1+10) + sep(2) + sparkline(10)
-    _FIXED_PREFIX_WIDTH = 125
+    @staticmethod
+    def _compute_used_width(cols: set[str]) -> int:
+        """Compute the total character width used by visible columns."""
+        # Core: accent(2) + num(3) + sep(1) + project(16) + sep(1)
+        #       + status(1+8) + stale(5) + tool(1+12) = 50
+        w = 50
+        if "session" in cols:
+            w += 31  # 30 + 1 sep
+        if "tcnt" in cols:
+            w += 4
+        if "ecnt" in cols:
+            w += 3
+        if "uptime" in cols:
+            w += 8
+        if "ctx" in cols:
+            w += 6
+        if "branch" in cols:
+            w += 11  # 10 + 1 sep
+        if "sparkline" in cols:
+            w += 12  # 10 + 2 sep
+        return w
 
     def _render_row(self) -> Text:
-        """Render the row as Rich Text with fixed-width columns."""
+        """Render the row as Rich Text with responsive columns."""
         text = Text()
         agent = self.agent
+
+        content_width = (getattr(self.size, "width", 120) or 120) - 2  # padding: 0 1
+        cols = _visible_columns(content_width)
 
         symbol, label, color = STATUS_DISPLAY[agent.status]
 
@@ -221,7 +285,7 @@ class SessionRow(ListItem):
 
         text.append(" ", style="dim")
 
-        # Col 3: Project name (fixed 12 chars) + separator (1)
+        # Col 3: Project name (fixed 16 chars) + separator (1)
         project = agent.project_name or agent.session_id[:12]
         if agent.subagent_count > 0:
             project = f"{project} [{agent.subagent_count}s]"
@@ -229,9 +293,10 @@ class SessionRow(ListItem):
         text.append(" ", style="dim")
 
         # Col 3a: Session name (fixed 30 chars) + separator (1)
-        sess = (agent.session_name or "")[:self._COL_SESSION]
-        text.append(f"{sess:<{self._COL_SESSION}s}"[:self._COL_SESSION], style="dim italic")
-        text.append(" ", style="dim")
+        if "session" in cols:
+            sess = (agent.session_name or "")[:self._COL_SESSION]
+            text.append(f"{sess:<{self._COL_SESSION}s}"[:self._COL_SESSION], style="dim italic")
+            text.append(" ", style="dim")
 
         # Col 4: Status badge (fixed 8 chars: ">>> WORK", "[!] PERM")
         status_str = f"{symbol} {label:<4s}"
@@ -263,47 +328,53 @@ class SessionRow(ListItem):
         text.append(f" {tool:<{self._COL_TOOL}s}", style="white")
 
         # Col 6: Tool count (right-aligned 4 chars)
-        text.append(f"{agent.tool_count:>{self._COL_TCNT}d}", style="dim")
+        if "tcnt" in cols:
+            text.append(f"{agent.tool_count:>{self._COL_TCNT}d}", style="dim")
 
         # Col 7: Error count (right-aligned 3 chars)
-        ecnt = f"{agent.error_count:>{self._COL_ECNT}d}"
-        if agent.error_count > 0:
-            text.append(ecnt, style=f"bold {PINK}")
-        else:
-            text.append(ecnt, style="dim")
+        if "ecnt" in cols:
+            ecnt = f"{agent.error_count:>{self._COL_ECNT}d}"
+            if agent.error_count > 0:
+                text.append(ecnt, style=f"bold {PINK}")
+            else:
+                text.append(ecnt, style="dim")
 
         # Col 8: Uptime (right-aligned 8 chars)
-        text.append(f"{agent.uptime:>{self._COL_UPTIME}s}", style="dim")
+        if "uptime" in cols:
+            text.append(f"{agent.uptime:>{self._COL_UPTIME}s}", style="dim")
 
         # Col 8b: Context window % (6 chars)
-        if self._ctx_pct < 0:
-            text.append(f"{'–':>5s} ", style="dim")
-        else:
-            pct = min(self._ctx_pct, 100)
-            text.append(f"{pct:>4d}%", style=f"bold {context_pct_color(float(pct))}")
-            text.append(" ", style="dim")
+        if "ctx" in cols:
+            if self._ctx_pct < 0:
+                text.append(f"{'–':>5s} ", style="dim")
+            else:
+                pct = min(self._ctx_pct, 100)
+                text.append(f"{pct:>4d}%", style=f"bold {context_pct_color(float(pct))}")
+                text.append(" ", style="dim")
 
         # Col 9: Git branch (1 space + fixed 10 chars)
-        branch = agent.git_branch or ""
-        if branch:
-            branch_display = branch[:self._COL_BRANCH - 1]
-            if agent.git_dirty_count > 0:
-                branch_display = branch[:self._COL_BRANCH - 2] + "*"
-            text.append(
-                f" {branch_display:<{self._COL_BRANCH}s}"[:self._COL_BRANCH + 1],
-                style=f"bold {CYAN}" if agent.git_dirty_count == 0 else f"bold {YELLOW}",
-            )
-        else:
-            text.append(" " * (self._COL_BRANCH + 1), style="dim")
+        if "branch" in cols:
+            branch = agent.git_branch or ""
+            if branch:
+                branch_display = branch[:self._COL_BRANCH - 1]
+                if agent.git_dirty_count > 0:
+                    branch_display = branch[:self._COL_BRANCH - 2] + "*"
+                text.append(
+                    f" {branch_display:<{self._COL_BRANCH}s}"[:self._COL_BRANCH + 1],
+                    style=f"bold {CYAN}" if agent.git_dirty_count == 0 else f"bold {YELLOW}",
+                )
+            else:
+                text.append(" " * (self._COL_BRANCH + 1), style="dim")
 
         # Col 10: Sparkline (10 chars)
-        text.append("  ", style="dim")
-        sparkline = self._render_sparkline(agent.activity_history)
-        text.append_text(sparkline)
+        if "sparkline" in cols:
+            text.append("  ", style="dim")
+            sparkline = self._render_sparkline(agent.activity_history)
+            text.append_text(sparkline)
 
-        # Col 10: Notification message + action hints (width-aware)
-        content_width = (getattr(self.size, "width", 120) or 120) - 2  # padding: 0 1
-        remaining = content_width - self._FIXED_PREFIX_WIDTH
+        # Compute used width for notification/action hints
+        used_width = self._compute_used_width(cols)
+        remaining = content_width - used_width
 
         # Determine action hint width: "[y][n]" = 6, "[->]" = 4, plus 2 separator each
         hint_width = 0
