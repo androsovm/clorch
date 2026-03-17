@@ -4,28 +4,28 @@ from __future__ import annotations
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.screen import ModalScreen
-from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, Static
 
-from clorch.state.manager import StateManager
-from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
-from clorch.constants import (
-    AgentStatus,
-    ANIM_INTERVAL,
-    TELEMETRY_HISTORY_LEN,
-    TELEMETRY_BUCKET_TICKS,
-)
 from clorch.config import RULES_PATH
-from clorch.rules import RulesConfig, load_rules, save_rules, evaluate
-from clorch.tui.widgets.session_list import SessionList, ListHeader
+from clorch.constants import (
+    ANIM_INTERVAL,
+    TELEMETRY_BUCKET_TICKS,
+    TELEMETRY_HISTORY_LEN,
+    AgentStatus,
+)
+from clorch.rules import RulesConfig, evaluate, load_rules, save_rules
+from clorch.state.manager import StateManager
+from clorch.state.models import ActionItem, AgentState, StatusSummary, build_action_queue
 from clorch.tui.widgets.agent_detail import AgentDetail
-from clorch.tui.widgets.header_bar import HeaderBar
 from clorch.tui.widgets.context_footer import ContextFooter
-from clorch.tui.widgets.telemetry_panel import TelemetryPanel
 from clorch.tui.widgets.event_log import EventLog
+from clorch.tui.widgets.header_bar import HeaderBar
+from clorch.tui.widgets.session_list import ListHeader, SessionList
 from clorch.tui.widgets.settings_panel import SettingsPanel
+from clorch.tui.widgets.telemetry_panel import TelemetryPanel
 
 
 class PromptScreen(ModalScreen[str | None]):
@@ -91,7 +91,8 @@ class HelpScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         from rich.text import Text
-        from clorch.constants import CYAN, GREEN, RED, GREY, YELLOW
+
+        from clorch.constants import CYAN, GREEN, GREY, RED, YELLOW
 
         text = Text()
         text.append("CLAUDE ORCH HELP\n\n", style=f"bold {CYAN}")
@@ -679,7 +680,7 @@ class OrchestratorApp(App):
         to the terminal tab so the user can approve/deny manually.
         Agents in unreachable terminals are blocked with a warning.
         """
-        from clorch.tmux.navigator import map_agent_to_window, jump_to_tab
+        from clorch.tmux.navigator import jump_to_tab
         from clorch.tmux.session import TmuxSession
 
         name = agent.project_name or agent.session_id[:12]
@@ -764,11 +765,11 @@ class OrchestratorApp(App):
         with a warning.
         """
         from clorch.tmux.navigator import (
+            bring_terminal_to_front,
             jump_to_tab,
             jump_to_tmux_tab,
-            select_tmux_pane,
-            bring_terminal_to_front,
             pid_alive,
+            select_tmux_pane,
         )
         from clorch.tmux.session import TmuxSession
 

@@ -1,17 +1,12 @@
 """Tests for StateManager."""
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
-
-import pytest
 
 from clorch.constants import AgentStatus
 from clorch.state.manager import StateManager
-from clorch.state.models import AgentState
-
 
 # ------------------------------------------------------------------
 # scan()
