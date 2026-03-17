@@ -791,11 +791,20 @@ class OrchestratorApp(App):
             self.notify(f"{name}: process dead, removed", severity="warning")
             return
 
-        # tmux session: select-window + select-pane, then switch terminal tab
+        # tmux session: activate the terminal tab already showing the target
+        # window.  Do NOT call select-window first — in a shared tmux session
+        # (all tabs attached to the same session), select-window would switch
+        # every client, including the clorch tab, to the target window.
+        # If tab lookup fails (no client is currently viewing that window),
+        # fall back to select-window as a last resort.
         if agent.tmux_window:
+            tmux = TmuxSession(session_name=agent.tmux_session or None)
+            if jump_to_tmux_tab(tmux, agent.tmux_window):
+                bring_terminal_to_front()
+                self.notify(f"Jumped to {name}")
+                return
+            # Fallback: no tab found via tty/window mapping; use select-window.
             if select_tmux_pane(agent):
-                tmux = TmuxSession(session_name=agent.tmux_session or None)
-                jump_to_tmux_tab(tmux, agent.tmux_window)
                 bring_terminal_to_front()
                 self.notify(f"Jumped to {name}")
                 return
