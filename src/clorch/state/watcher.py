@@ -145,7 +145,7 @@ class StateWatcher:
             a.session_id: (
                 f"{a.status.value}|{a.last_event_time}|{a.tool_count}"
                 f"|{a.error_count}|{a.notification_message}"
-                f"|{len(a.subagents)}|{a.compact_count}|{a.task_completed_count}"
+                f"|{len(a.running_subagents)}:{len(a.subagents)}|{a.compact_count}|{a.task_completed_count}"
             )
             for a in agents
         }

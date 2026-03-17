@@ -357,7 +357,7 @@ case "$EVENT" in
             '
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .subagent_count = ((.subagent_count // 0) + 1) |
+            .subagent_count = (if $agent_id != "" then ((.subagent_count // 0) + 1) else (.subagent_count // 0) end) |
             .subagents = ((.subagents // {}) |
                 if $agent_id != "" then
                     .[$agent_id] = {
@@ -386,7 +386,7 @@ case "$EVENT" in
             '
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .subagent_count = ([0, ((.subagent_count // 0) - 1)] | max) |
+            .subagent_count = (if $agent_id != "" then ([0, ((.subagent_count // 0) - 1)] | max) else (.subagent_count // 0) end) |
             .subagents = ((.subagents // {}) |
                 if $agent_id != "" then
                     if .[$agent_id] then
