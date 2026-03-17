@@ -786,8 +786,7 @@ class OrchestratorApp(App):
 
         # Dead process check — remove stale state file immediately
         if agent.pid and not pid_alive(agent.pid):
-            state_file = self._manager._state_dir / f"{agent.session_id}.json"
-            state_file.unlink(missing_ok=True)
+            self._manager.remove_session(agent.session_id)
             self.notify(f"{name}: process dead, removed", severity="warning")
             return
 

@@ -118,6 +118,16 @@ def jump_to_tab(agent: AgentState) -> bool:
     return False
 
 
+def _is_safe_tmux_name(value: str) -> bool:
+    """Return True if *value* is safe to embed in a tmux ``-t`` target.
+
+    Rejects empty strings and values containing ``:`` (tmux session/window
+    separator) or ``"`` / ``'`` (shell quoting), which could cause the target
+    to address an unintended session or pane.
+    """
+    return bool(value) and not any(c in value for c in (':', '"', "'"))
+
+
 def select_tmux_pane(agent: AgentState) -> bool:
     """Focus the tmux window + pane for this agent.
 
@@ -144,6 +154,9 @@ def select_tmux_pane(agent: AgentState) -> bool:
     # Prefer window index — names can be duplicated across windows,
     # and tmux refuses to select-window by an ambiguous name.
     window_target = agent.tmux_window_index or agent.tmux_window
+    if not _is_safe_tmux_name(window_target):
+        log.warning("select_tmux_pane: unsafe window target %r", window_target)
+        return False
     target = f"{client_session}:{window_target}"
     result = tmux.run_command("select-window", "-t", target, check=False)
     if result.returncode != 0:

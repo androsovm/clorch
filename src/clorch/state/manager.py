@@ -83,6 +83,23 @@ class StateManager:
         agent.session_name = self._history.resolve(agent.session_id)
         return agent
 
+    def remove_session(self, session_id: str) -> bool:
+        """Delete the state file for *session_id*.
+
+        Returns ``True`` if the file was removed, ``False`` if it did not exist
+        or the session_id was invalid.  Uses the same ID validation as
+        ``get_agent`` to prevent path traversal.
+        """
+        if not _VALID_SESSION_ID.match(session_id):
+            log.warning("remove_session: invalid session_id %r", session_id)
+            return False
+        path = self._state_dir / f"{session_id}.json"
+        try:
+            path.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
     def verify_status(self, session_id: str, expected: "AgentStatus") -> bool:
         """Re-read the state file and confirm the agent is still in *expected* status.
 

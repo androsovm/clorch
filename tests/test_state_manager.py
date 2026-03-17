@@ -91,6 +91,50 @@ class TestStateManagerGetAgent:
 
 
 # ------------------------------------------------------------------
+# remove_session()
+# ------------------------------------------------------------------
+
+
+class TestStateManagerRemoveSession:
+    """Tests for StateManager.remove_session()."""
+
+    def test_removes_existing_file(self, tmp_state_dir, make_agent_state):
+        """Returns True and deletes the file when it exists."""
+        make_agent_state(session_id="to-remove")
+        mgr = StateManager(state_dir=tmp_state_dir)
+
+        result = mgr.remove_session("to-remove")
+
+        assert result is True
+        assert not (tmp_state_dir / "to-remove.json").exists()
+
+    def test_returns_false_when_missing(self, tmp_state_dir):
+        """Returns False (no error) when the file does not exist."""
+        mgr = StateManager(state_dir=tmp_state_dir)
+        assert mgr.remove_session("nonexistent") is False
+
+    def test_rejects_invalid_session_id(self, tmp_state_dir, make_agent_state):
+        """Rejects session IDs that fail the regex — prevents path traversal."""
+        make_agent_state(session_id="victim")
+        mgr = StateManager(state_dir=tmp_state_dir)
+
+        result = mgr.remove_session("../victim")
+
+        assert result is False
+        assert (tmp_state_dir / "victim.json").exists()
+
+    def test_does_not_affect_other_sessions(self, tmp_state_dir, make_agent_state):
+        """Removing one session leaves others intact."""
+        make_agent_state(session_id="keep-me")
+        make_agent_state(session_id="delete-me")
+        mgr = StateManager(state_dir=tmp_state_dir)
+
+        mgr.remove_session("delete-me")
+
+        assert (tmp_state_dir / "keep-me.json").exists()
+
+
+# ------------------------------------------------------------------
 # get_summary()
 # ------------------------------------------------------------------
 
