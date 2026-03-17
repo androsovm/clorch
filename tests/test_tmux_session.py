@@ -1,10 +1,7 @@
 """Tests for TmuxSession.send_keys() and get_pane_target()."""
 from __future__ import annotations
 
-import subprocess
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from clorch.tmux.session import TmuxSession
 
@@ -103,8 +100,8 @@ class TestSelectTmuxPaneValidation:
 
     def test_rejects_colon_in_window_name(self):
         """A window name containing ':' would corrupt the tmux target — must return False."""
-        from clorch.tmux.navigator import select_tmux_pane
         from clorch.state.models import AgentState
+        from clorch.tmux.navigator import select_tmux_pane
 
         agent = AgentState(
             session_id="s",
