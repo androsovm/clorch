@@ -102,7 +102,7 @@ Clorch does not read, modify, or access your project files. Here's what it touch
 |---------|:-:|:-:|:-:|:-:|
 | Dashboard & approve/deny | yes | yes | yes | yes |
 | Jump to agent (tmux) | yes | yes | yes | yes |
-| Jump to agent (native tab) | yes | — | — | — |
+| Jump to agent (native tab) | yes | yes* | — | — |
 | Open tmux window as tab | yes | yes* | — | — |
 | Native notifications | yes | yes | yes | — |
 | Terminal bell | yes | yes | yes | yes |

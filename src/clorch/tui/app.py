@@ -161,6 +161,30 @@ class HelpScreen(ModalScreen[None]):
             event.prevent_default()
 
 
+def _set_tty_title(pid: int, title: str) -> None:
+    """Set the terminal tab title for a process by writing to its tty.
+
+    Claude Code overrides the tab title to "Claude Code", making tabs
+    indistinguishable.  This stamps the project name so Ghostty's
+    Window menu shows a unique title for ``activate_by_name`` to match.
+    """
+    import subprocess as _sp
+
+    try:
+        result = _sp.run(
+            ["ps", "-p", str(pid), "-o", "tty="],
+            capture_output=True, text=True, timeout=3,
+        )
+        tty = result.stdout.strip()
+        if tty and tty != "??":
+            if not tty.startswith("/dev/"):
+                tty = f"/dev/{tty}"
+            with open(tty, "w") as f:
+                f.write(f"\033]0;{title}\033\\")
+    except (OSError, _sp.TimeoutExpired):
+        pass
+
+
 class OrchestratorApp(App):
     """Clorch TUI Dashboard."""
 
@@ -771,8 +795,8 @@ class OrchestratorApp(App):
         if agent.tmux_window:
             if select_tmux_pane(agent):
                 tmux = TmuxSession(session_name=agent.tmux_session or None)
-                if jump_to_tmux_tab(tmux, agent.tmux_window):
-                    bring_terminal_to_front()
+                jump_to_tmux_tab(tmux, agent.tmux_window)
+                bring_terminal_to_front()
                 self.notify(f"Jumped to {name}")
                 return
 
@@ -780,6 +804,20 @@ class OrchestratorApp(App):
         if jump_to_tab(agent):
             self.notify(f"Jumped to {name}")
             return
+
+        # Fallback: set terminal title via tty escape sequence, then match
+        # by name in the Window menu (Ghostty).  Claude Code overrides the
+        # tab title to "Claude Code", so we stamp a unique title (name + PID)
+        # to distinguish multiple tabs with the same project.
+        from clorch.terminal import get_backend
+        backend = get_backend()
+        if agent.pid:
+            tab_title = f"{name} · {agent.pid}"
+            _set_tty_title(agent.pid, tab_title)
+            if backend.activate_by_name(tab_title):
+                bring_terminal_to_front()
+                self.notify(f"Jumped to {name}")
+                return
 
         if not agent.pid:
             self.notify(f"{name}: no PID — restart session", severity="warning")
