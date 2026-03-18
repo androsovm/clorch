@@ -1,6 +1,7 @@
 """Event log panel — streaming event log from all agents."""
 from __future__ import annotations
 
+from collections import deque
 from datetime import datetime, timezone
 
 from rich.text import Text
@@ -15,11 +16,10 @@ MAX_EVENTS = 200
 class EventLog(VerticalScroll):
     """Scrolling event log with colored entries, newest on top."""
 
-    _event_count: int = 0
-
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.can_focus = True
+        self._entries: deque[Static] = deque()
 
     def write_event(
         self,
@@ -40,22 +40,24 @@ class EventLog(VerticalScroll):
         text.append(message, style=hex_color)
 
         entry = Static(text, classes="event-entry event-new")
-        children = self.query(".event-entry")
-        if children:
-            self.mount(entry, before=children.first())
+        if self._entries:
+            self.mount(entry, before=self._entries[0])
         else:
             self.mount(entry)
+        self._entries.appendleft(entry)
         self.set_timer(1.5, lambda: entry.remove_class("event-new"))
 
-        self._event_count += 1
-        if self._event_count > MAX_EVENTS:
-            last = children.last()
-            if last is not None:
-                last.remove()
-                self._event_count -= 1
+        while len(self._entries) > MAX_EVENTS:
+            old = self._entries.pop()
+            old.remove()
+
+    @property
+    def event_count(self) -> int:
+        """Number of entries currently tracked."""
+        return len(self._entries)
 
     def clear(self) -> None:
         """Remove all event entries."""
-        for child in self.query(".event-entry"):
+        for child in self._entries:
             child.remove()
-        self._event_count = 0
+        self._entries.clear()

@@ -1,9 +1,11 @@
 """Shared fixtures for clorch tests."""
+
 from __future__ import annotations
 
 import json
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
@@ -17,6 +19,7 @@ def tmp_state_dir(tmp_path):
 @pytest.fixture
 def make_agent_state(tmp_state_dir):
     """Factory fixture to create agent state JSON files."""
+
     def _make(
         session_id: str = "test-session",
         status: str = "WORKING",
@@ -27,7 +30,6 @@ def make_agent_state(tmp_state_dir):
         last_tool: str = "Edit",
         tool_count: int = 10,
         error_count: int = 0,
-        subagent_count: int = 0,
         compact_count: int = 0,
         last_compact_time: str = "",
         task_completed_count: int = 0,
@@ -38,6 +40,7 @@ def make_agent_state(tmp_state_dir):
         activity_history: list[int] | None = None,
         tool_request_summary: str | None = None,
         pid: int | None = None,
+        subagents: dict | None = None,
     ) -> Path:
         if activity_history is None:
             activity_history = [0, 1, 2, 3, 2, 1, 0, 3, 2, 1]
@@ -53,7 +56,6 @@ def make_agent_state(tmp_state_dir):
             "last_tool": last_tool,
             "tool_count": tool_count,
             "error_count": error_count,
-            "subagent_count": subagent_count,
             "compact_count": compact_count,
             "last_compact_time": last_compact_time,
             "task_completed_count": task_completed_count,
@@ -63,7 +65,10 @@ def make_agent_state(tmp_state_dir):
             "tool_request_summary": tool_request_summary,
             "pid": pid,
         }
+        if subagents is not None:
+            state["subagents"] = subagents
         path = tmp_state_dir / f"{session_id}.json"
         path.write_text(json.dumps(state))
         return path
+
     return _make

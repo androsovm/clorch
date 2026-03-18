@@ -1,4 +1,5 @@
 """Agent detail panel — bottom panel showing agent info or PERM details."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -62,10 +63,7 @@ class AgentDetail(Static):
             self.update("")
             return
 
-        if (
-            agent.status == AgentStatus.WAITING_PERMISSION
-            and agent.tool_request_summary
-        ):
+        if agent.status == AgentStatus.WAITING_PERMISSION and agent.tool_request_summary:
             self._render_perm_view(agent)
         else:
             self._render_normal_view(agent)

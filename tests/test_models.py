@@ -56,7 +56,6 @@ class TestAgentStateFromJsonFile:
         """New counter fields load correctly from JSON."""
         path = make_agent_state(
             session_id="new-fields",
-            subagent_count=3,
             compact_count=2,
             last_compact_time="2026-02-22T11:00:00Z",
             task_completed_count=5,
@@ -64,7 +63,7 @@ class TestAgentStateFromJsonFile:
 
         agent = AgentState.from_json_file(path)
 
-        assert agent.subagent_count == 3
+        assert agent.subagent_count == 0  # derived from empty subagents list
         assert agent.compact_count == 2
         assert agent.last_compact_time == "2026-02-22T11:00:00Z"
         assert agent.task_completed_count == 5

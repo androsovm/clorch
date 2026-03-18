@@ -11,6 +11,7 @@ from clorch.constants import (
     RED,
     SPARKLINE_CHARS,
     YELLOW,
+    SubAgentStatus,
     context_pct_color,
     model_context_capacity,
 )
@@ -23,6 +24,8 @@ _GAUGE_W = 8
 _SPARKLINE_W = 15
 # Agent name column width
 _NAME_W = 12
+# Max sub-agent rows per parent
+_MAX_SUBAGENT_ROWS = 6
 
 
 class TelemetryPanel(Static):
@@ -112,5 +115,22 @@ class TelemetryPanel(Static):
             # Warning icon at 4+ compacts
             if cc >= 4:
                 text.append(" \u26a0", style=f"bold {RED}")
+
+            # Sub-agent hierarchy (indented children)
+            visible = agent.visible_subagents(limit=_MAX_SUBAGENT_ROWS)
+            for sa in visible:
+                text.append("\n")
+                sa_name = (sa.agent_type or "?")[:_NAME_W - 2]
+                if sa.status == SubAgentStatus.RUNNING:
+                    text.append("  >>> ", style=f"bold {GREEN}")
+                    text.append(f"{sa_name:<{_NAME_W - 2}s}", style=GREEN)
+                    sa_suffix = sa.duration
+                else:
+                    text.append("  --- ", style=f"dim {GREY}")
+                    text.append(f"{sa_name:<{_NAME_W - 2}s}", style=f"dim {GREY}")
+                    sa_suffix = sa.duration + " \u2713"
+                # Right-align duration where activity column is
+                gap = _GAUGE_W + 10  # gauge + label + spacing
+                text.append(f"{sa_suffix:>{gap}s}", style=f"dim {GREY}")
 
         self.update(text)

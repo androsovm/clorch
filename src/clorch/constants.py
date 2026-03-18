@@ -15,6 +15,13 @@ class AgentStatus(str, Enum):
     ERROR = "ERROR"
 
 
+class SubAgentStatus(str, Enum):
+    """Possible states of a sub-agent."""
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+
+
 # Display mapping: symbol, label, hex color
 STATUS_DISPLAY: dict[AgentStatus, tuple[str, str, str]] = {
     AgentStatus.WORKING:            (">>>", "WORK", "#A3BE8C"),

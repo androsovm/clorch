@@ -345,25 +345,71 @@ case "$EVENT" in
         ;;
 
     SubagentStart)
+        AGENT_ID="$(echo "$INPUT_JSON" | jq -r '.agent_id // empty')"
+        if [[ -n "$AGENT_ID" && ! "$AGENT_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            AGENT_ID=""
+        fi
+        AGENT_TYPE="$(echo "$INPUT_JSON" | jq -r '.agent_type // "unknown"')"
+
         echo "$CURRENT_STATE" | jq \
             --arg last_event "SubagentStart" \
             --arg last_event_time "$NOW" \
+            --arg agent_id "$AGENT_ID" \
+            --arg agent_type "$AGENT_TYPE" \
+            --arg now "$NOW" \
             '
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .subagent_count = ((.subagent_count // 0) + 1)
+            .subagents = ((.subagents // {}) |
+                if $agent_id != "" then
+                    .[$agent_id] = {
+                        agent_id: $agent_id,
+                        agent_type: $agent_type,
+                        status: "running",
+                        started_at: $now
+                    }
+                else . end)
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
 
     SubagentStop)
+        AGENT_ID="$(echo "$INPUT_JSON" | jq -r '.agent_id // empty')"
+        if [[ -n "$AGENT_ID" && ! "$AGENT_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            AGENT_ID=""
+        fi
+        LAST_MSG="$(echo "$INPUT_JSON" | jq -r '.last_assistant_message // "" | .[0:200]')"
+        TRANSCRIPT="$(echo "$INPUT_JSON" | jq -r '.agent_transcript_path // ""')"
+
         echo "$CURRENT_STATE" | jq \
             --arg last_event "SubagentStop" \
             --arg last_event_time "$NOW" \
+            --arg agent_id "$AGENT_ID" \
+            --arg last_msg "$LAST_MSG" \
+            --arg transcript "$TRANSCRIPT" \
+            --arg now "$NOW" \
             '
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .subagent_count = ([0, ((.subagent_count // 0) - 1)] | max)
+            .subagents = ((.subagents // {}) |
+                if $agent_id != "" then
+                    if .[$agent_id] then
+                        .[$agent_id].status = "completed" |
+                        .[$agent_id].completed_at = $now |
+                        .[$agent_id].last_message = $last_msg |
+                        .[$agent_id].transcript_path = $transcript
+                    else
+                        .[$agent_id] = {
+                            agent_id: $agent_id,
+                            agent_type: "unknown",
+                            status: "completed",
+                            started_at: $now,
+                            completed_at: $now,
+                            last_message: $last_msg,
+                            transcript_path: $transcript
+                        }
+                    end
+                else . end)
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;

@@ -7,7 +7,43 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from clorch.constants import AgentStatus, ATTENTION_STATUSES, ACTIVITY_HISTORY_LEN
+from clorch.constants import ACTIVITY_HISTORY_LEN, ATTENTION_STATUSES, AgentStatus, SubAgentStatus
+
+SUBAGENT_RETENTION_SECONDS = 300
+
+
+@dataclass(frozen=True)
+class SubAgentInfo:
+    """Info about a single sub-agent spawned by a parent session."""
+
+    agent_id: str
+    agent_type: str = ""
+    status: SubAgentStatus = SubAgentStatus.RUNNING
+    started_at: str = ""
+    completed_at: str = ""
+    last_message: str = ""
+    transcript_path: str = ""
+
+    @property
+    def duration(self) -> str:
+        """Human-readable duration like '12s' or '2m 15s'."""
+        try:
+            start = self.started_at or ""
+            if not start:
+                return "0s"
+            started = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            if self.status == SubAgentStatus.COMPLETED and self.completed_at:
+                end = datetime.fromisoformat(self.completed_at.replace("Z", "+00:00"))
+            else:
+                end = datetime.now(timezone.utc)
+            delta = int((end - started).total_seconds())
+            if delta < 0:
+                delta = 0
+            if delta >= 60:
+                return f"{delta // 60}m {delta % 60:02d}s"
+            return f"{delta}s"
+        except (ValueError, TypeError):
+            return "?"
 
 
 @dataclass
@@ -27,7 +63,7 @@ class AgentState:
     started_at: str = ""
     tool_count: int = 0
     error_count: int = 0
-    subagent_count: int = 0
+    subagents: list[SubAgentInfo] = field(default_factory=list)
     compact_count: int = 0
     last_compact_time: str = ""
     task_completed_count: int = 0
@@ -44,6 +80,11 @@ class AgentState:
     tmux_window_index: str = ""
     term_program: str = ""
     tool_request_summary: str | None = None
+
+    @property
+    def subagent_count(self) -> int:
+        """Count of currently running sub-agents."""
+        return len(self.running_subagents)
 
     @property
     def uptime(self) -> str:
@@ -64,6 +105,23 @@ class AgentState:
         """True if agent is waiting for user input or has an error."""
         return self.status in ATTENTION_STATUSES
 
+    @property
+    def running_subagents(self) -> list[SubAgentInfo]:
+        """Sub-agents currently running."""
+        return [s for s in self.subagents if s.status == SubAgentStatus.RUNNING]
+
+    @property
+    def completed_subagents(self) -> list[SubAgentInfo]:
+        """Sub-agents that have completed."""
+        return [s for s in self.subagents if s.status == SubAgentStatus.COMPLETED]
+
+    def visible_subagents(self, limit: int = 6) -> list[SubAgentInfo]:
+        """Sub-agents to display: running first, then completed, capped at *limit*."""
+        running = self.running_subagents[:limit]
+        remaining = max(0, limit - len(running))
+        completed = self.completed_subagents[:remaining]
+        return running + completed
+
     @classmethod
     def from_json_file(cls, path: Path) -> AgentState:
         """Load state from a JSON file on disk."""
@@ -73,6 +131,33 @@ class AgentState:
             status = AgentStatus(status_raw)
         except ValueError:
             status = AgentStatus.IDLE
+        # Parse subagents dict → list, pruning completed entries older than retention
+        subagents_raw = data.get("subagents", {})
+        subagents: list[SubAgentInfo] = []
+        now = datetime.now(timezone.utc)
+        if isinstance(subagents_raw, dict):
+            for aid, info in subagents_raw.items():
+                if not isinstance(info, dict):
+                    continue
+                si = SubAgentInfo(
+                    agent_id=info.get("agent_id", aid),
+                    agent_type=info.get("agent_type", ""),
+                    status=info.get("status", SubAgentStatus.RUNNING),
+                    started_at=info.get("started_at", ""),
+                    completed_at=info.get("completed_at", ""),
+                    last_message=info.get("last_message", ""),
+                    transcript_path=info.get("transcript_path", ""),
+                )
+                # Prune completed sub-agents older than retention period
+                if si.status == SubAgentStatus.COMPLETED and si.completed_at:
+                    try:
+                        completed = datetime.fromisoformat(si.completed_at.replace("Z", "+00:00"))
+                        if (now - completed).total_seconds() > SUBAGENT_RETENTION_SECONDS:
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                subagents.append(si)
+
         return cls(
             session_id=data.get("session_id", path.stem),
             status=status,
@@ -87,7 +172,7 @@ class AgentState:
             started_at=data.get("started_at", ""),
             tool_count=data.get("tool_count", 0),
             error_count=data.get("error_count", 0),
-            subagent_count=data.get("subagent_count", 0),
+            subagents=subagents,
             compact_count=data.get("compact_count", 0),
             last_compact_time=data.get("last_compact_time", ""),
             task_completed_count=data.get("task_completed_count", 0),
@@ -185,20 +270,24 @@ def build_action_queue(agents: list[AgentState]) -> list[ActionItem]:
     send-keys.
     """
     attention = [a for a in agents if a.status in ATTENTION_STATUSES]
-    attention.sort(key=lambda a: (
-        _ACTION_PRIORITY.get(a.status, 99),
-        0 if a.tmux_window else 1,
-    ))
+    attention.sort(
+        key=lambda a: (
+            _ACTION_PRIORITY.get(a.status, 99),
+            0 if a.tmux_window else 1,
+        )
+    )
 
     items: list[ActionItem] = []
     for i, agent in enumerate(attention[:26]):
         letter = chr(ord("a") + i)
         actionable = agent.status == AgentStatus.WAITING_PERMISSION
         summary = agent.notification_message or agent.tool_request_summary or ""
-        items.append(ActionItem(
-            letter=letter,
-            agent=agent,
-            actionable=actionable,
-            summary=summary,
-        ))
+        items.append(
+            ActionItem(
+                letter=letter,
+                agent=agent,
+                actionable=actionable,
+                summary=summary,
+            )
+        )
     return items
