@@ -95,7 +95,7 @@ TMUX_WINDOW_INDEX=""
 # Detect tmux window AND pane ONLY if Claude Code's tty is actually inside a tmux pane.
 # Plain `tmux display-message` returns whatever the last client sees, which is
 # wrong when the agent runs in an iTerm tab while a tmux server is up.
-_CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
+_CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')" || _CLAUDE_TTY=""
 if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
     _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty}|||#{window_name}|||#{pane_index}|||#{session_name}|||#{window_index}' 2>/dev/null \
         | awk -v tty="/dev/$_CLAUDE_TTY" -F '\\|\\|\\|' '$1 == tty { print $2; print $3; print $4; print $5; exit }')" || true
@@ -113,7 +113,7 @@ fi
 if [[ -n "$_EFFECTIVE_CWD" && -d "$_EFFECTIVE_CWD" ]]; then
     GIT_BRANCH="$(cd "$_EFFECTIVE_CWD" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
     if [[ -n "$GIT_BRANCH" ]]; then
-        GIT_DIRTY="$(cd "$_EFFECTIVE_CWD" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+        GIT_DIRTY="$(cd "$_EFFECTIVE_CWD" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')" || GIT_DIRTY=0
     fi
 fi
 
