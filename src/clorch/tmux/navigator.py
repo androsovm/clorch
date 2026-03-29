@@ -91,7 +91,29 @@ def jump_to_tmux_tab(tmux: TmuxSession, window: str) -> bool:
                         return backend.activate_tab(tab_ref)
 
     # Strategy 2: match window name in terminal tab titles
-    return backend.activate_by_name(window)
+    if backend.activate_by_name(window):
+        return True
+
+    # Strategy 3: match by client session name (handles terminals like
+    # Ghostty where tabs are named after linked tmux sessions, not windows)
+    result = tmux.run_command(
+        "list-clients",
+        "-F", "#{client_session}\t#{window_name}",
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        for line in result.stdout.strip().splitlines():
+            parts = line.split("\t", 1)
+            if len(parts) == 2 and parts[1] == window:
+                session_name = parts[0]
+                if backend.activate_by_name(session_name):
+                    return True
+                # Try suffix after last hyphen (e.g. "claude-surge" → "surge")
+                suffix = session_name.rsplit("-", 1)[-1]
+                if suffix != session_name and backend.activate_by_name(suffix):
+                    return True
+
+    return False
 
 
 def jump_to_tab(agent: AgentState) -> bool:
