@@ -58,8 +58,11 @@ Screen {
     background: #2E3440;
 }
 
-#session-list > ListItem.--highlight {
-    background: #4C566A;
+#session-list > ListItem.-highlight,
+#session-list:focus > ListItem.-highlight {
+    background: #434C5E;
+    color: #ECEFF4;
+    text-style: bold;
 }
 
 /* -- Right panel: vertical stack of sub-panels -- */

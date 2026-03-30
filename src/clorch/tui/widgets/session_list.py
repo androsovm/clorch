@@ -1,6 +1,7 @@
 """Session list widget — ListView replacement for AgentTable (DataTable)."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from rich.text import Text
@@ -25,6 +26,75 @@ from clorch.constants import (
 from clorch.state.models import ActionItem, AgentState
 from clorch.terminal.detect import get_terminal_label, normalize_term_program
 from clorch.usage.models import SessionUsage
+
+_SELECTED_ROW_BG = "#434C5E"
+_SELECTED_PRIMARY = "#ECEFF4"
+_SELECTED_SECONDARY = "#D8DEE9"
+_SELECTED_MUTED = "#B8C0CF"
+_SELECTED_DANGER = "#E7A1A8"
+_SELECTED_ERROR = "#E5C6DD"
+
+
+@dataclass(frozen=True)
+class _RowPalette:
+    """Text styles for a list row.
+
+    Selected rows need a separate palette because Rich span colors are not
+    automatically adapted when the parent ListItem background changes.
+    """
+
+    primary: str
+    primary_bold: str
+    secondary_italic: str
+    muted: str
+    idle: str
+    danger: str
+    error: str
+
+
+def _row_palette(selected: bool) -> _RowPalette:
+    """Return the effective palette for a row."""
+    if selected:
+        return _RowPalette(
+            primary=_SELECTED_PRIMARY,
+            primary_bold=f"bold {_SELECTED_PRIMARY}",
+            secondary_italic=f"italic {_SELECTED_SECONDARY}",
+            muted=_SELECTED_MUTED,
+            idle=_SELECTED_MUTED,
+            danger=_SELECTED_DANGER,
+            error=_SELECTED_ERROR,
+        )
+    return _RowPalette(
+        primary="white",
+        primary_bold="bold white",
+        secondary_italic="dim italic",
+        muted="dim",
+        idle=GREY,
+        danger=RED,
+        error=PINK,
+    )
+
+
+def _row_status_color(status: AgentStatus, selected: bool) -> str:
+    """Return a status color adapted for the current row state."""
+    if not selected:
+        return STATUS_DISPLAY[status][2]
+
+    palette = _row_palette(True)
+    if status == AgentStatus.IDLE:
+        return palette.idle
+    if status == AgentStatus.WAITING_PERMISSION:
+        return palette.danger
+    if status == AgentStatus.ERROR:
+        return palette.error
+    return STATUS_DISPLAY[status][2]
+
+
+def _row_context_color(pct: float, selected: bool) -> str:
+    """Return context percentage color adapted for selection."""
+    if selected and pct >= 80:
+        return _row_palette(True).danger
+    return context_pct_color(pct)
 
 
 def _visible_columns(width: int) -> set[str]:
@@ -173,6 +243,11 @@ class SessionRow(ListItem):
     def compose(self) -> ComposeResult:
         yield Static(self._render_row(), markup=False)
 
+    def watch_highlighted(self, value: bool) -> None:
+        """Refresh the row when ListView moves the highlight."""
+        super().watch_highlighted(value)
+        self._refresh_display()
+
     def set_action(self, action: ActionItem | None) -> None:
         """Associate an action item with this row."""
         self._action = action
@@ -253,11 +328,14 @@ class SessionRow(ListItem):
         """Render the row as Rich Text with responsive columns."""
         text = Text()
         agent = self.agent
+        selected = self.highlighted
+        palette = _row_palette(selected)
 
         content_width = (getattr(self.size, "width", 120) or 120) - 2  # padding: 0 1
         cols = _visible_columns(content_width)
 
-        symbol, label, color = STATUS_DISPLAY[agent.status]
+        symbol, label, _ = STATUS_DISPLAY[agent.status]
+        status_color = _row_status_color(agent.status, selected)
 
         # Animated symbol for WORKING: braille spinner (same width as ">>>")
         if agent.status == AgentStatus.WORKING:
@@ -266,14 +344,19 @@ class SessionRow(ListItem):
 
         # Col 1: Left accent (2 chars)
         if agent.status == AgentStatus.WAITING_PERMISSION:
-            perm_style = f"bold {RED}" if (self._anim_frame // 2) % 2 == 0 else f"dim {RED}"
+            perm_color = palette.danger
+            perm_style = (
+                f"bold {perm_color}"
+                if (self._anim_frame // 2) % 2 == 0
+                else perm_color
+            )
             text.append("\u2503 ", style=perm_style)
         elif agent.status == AgentStatus.WAITING_ANSWER:
             text.append("\u2503 ", style=f"bold {YELLOW}")
         elif agent.status == AgentStatus.ERROR:
-            text.append("\u2503 ", style=f"bold {PINK}")
+            text.append("\u2503 ", style=f"bold {palette.error}")
         else:
-            text.append("  ", style="dim")
+            text.append("  ", style=palette.muted)
 
         # Col 2: Row number or action letter (3 chars)
         if self._action:
@@ -281,26 +364,32 @@ class SessionRow(ListItem):
             text.append(f"[{self._action.letter}]", style=letter_style)
         else:
             display_num = self._row_num if self._row_num <= 9 else 0
-            text.append(f" {display_num} ", style="dim")
+            text.append(f" {display_num} ", style=palette.muted)
 
-        text.append(" ", style="dim")
+        text.append(" ", style=palette.muted)
 
         # Col 3: Project name (fixed 16 chars) + separator (1)
         project = agent.project_name or agent.session_id[:12]
         if agent.subagent_count > 0:
             project = f"{project} [{agent.subagent_count}s]"
-        text.append(f"{project:<{self._COL_PROJECT}s}"[:self._COL_PROJECT], style="bold white")
-        text.append(" ", style="dim")
+        text.append(
+            f"{project:<{self._COL_PROJECT}s}"[:self._COL_PROJECT],
+            style=palette.primary_bold,
+        )
+        text.append(" ", style=palette.muted)
 
         # Col 3a: Session name (fixed 30 chars) + separator (1)
         if "session" in cols:
             sess = (agent.session_name or "")[:self._COL_SESSION]
-            text.append(f"{sess:<{self._COL_SESSION}s}"[:self._COL_SESSION], style="dim italic")
-            text.append(" ", style="dim")
+            text.append(
+                f"{sess:<{self._COL_SESSION}s}"[:self._COL_SESSION],
+                style=palette.secondary_italic,
+            )
+            text.append(" ", style=palette.muted)
 
         # Col 4: Status badge (fixed 8 chars: ">>> WORK", "[!] PERM")
         status_str = f"{symbol} {label:<4s}"
-        text.append(f" {status_str:<{self._COL_STATUS}s}", style=f"bold {color}")
+        text.append(f" {status_str:<{self._COL_STATUS}s}", style=f"bold {status_color}")
 
         # Col 4b: Stale indicator (fixed 5 chars) — only for WORKING status
         stale_str = ""
@@ -312,45 +401,45 @@ class SessionRow(ListItem):
                     mins = int(age_s) // 60
                     secs = int(age_s) % 60
                     stale_str = f"{mins}m{secs:02d}"[:5]
-                    text.append(f"{stale_str:<5s}", style=f"bold {RED}")
+                    text.append(f"{stale_str:<5s}", style=f"bold {palette.danger}")
                 elif age_s > 30:
                     stale_str = f"{int(age_s)}s"
                     text.append(f"{stale_str:<5s}", style=f"bold {YELLOW}")
                 else:
-                    text.append(" " * self._COL_STALE, style="dim")
+                    text.append(" " * self._COL_STALE, style=palette.muted)
             except (ValueError, TypeError):
-                text.append(" " * self._COL_STALE, style="dim")
+                text.append(" " * self._COL_STALE, style=palette.muted)
         else:
-            text.append(" " * self._COL_STALE, style="dim")
+            text.append(" " * self._COL_STALE, style=palette.muted)
 
         # Col 5: Last tool (fixed 12 chars)
         tool = (agent.last_tool or "-")[:self._COL_TOOL]
-        text.append(f" {tool:<{self._COL_TOOL}s}", style="white")
+        text.append(f" {tool:<{self._COL_TOOL}s}", style=palette.primary)
 
         # Col 6: Tool count (right-aligned 4 chars)
         if "tcnt" in cols:
-            text.append(f"{agent.tool_count:>{self._COL_TCNT}d}", style="dim")
+            text.append(f"{agent.tool_count:>{self._COL_TCNT}d}", style=palette.muted)
 
         # Col 7: Error count (right-aligned 3 chars)
         if "ecnt" in cols:
             ecnt = f"{agent.error_count:>{self._COL_ECNT}d}"
             if agent.error_count > 0:
-                text.append(ecnt, style=f"bold {PINK}")
+                text.append(ecnt, style=f"bold {palette.error}")
             else:
-                text.append(ecnt, style="dim")
+                text.append(ecnt, style=palette.muted)
 
         # Col 8: Uptime (right-aligned 8 chars)
         if "uptime" in cols:
-            text.append(f"{agent.uptime:>{self._COL_UPTIME}s}", style="dim")
+            text.append(f"{agent.uptime:>{self._COL_UPTIME}s}", style=palette.muted)
 
         # Col 8b: Context window % (6 chars)
         if "ctx" in cols:
             if self._ctx_pct < 0:
-                text.append(f"{'–':>5s} ", style="dim")
+                text.append(f"{'–':>5s} ", style=palette.muted)
             else:
                 pct = min(self._ctx_pct, 100)
-                text.append(f"{pct:>4d}%", style=f"bold {context_pct_color(float(pct))}")
-                text.append(" ", style="dim")
+                text.append(f"{pct:>4d}%", style=f"bold {_row_context_color(float(pct), selected)}")
+                text.append(" ", style=palette.muted)
 
         # Col 9: Git branch (1 space + fixed 10 chars)
         if "branch" in cols:
@@ -364,11 +453,11 @@ class SessionRow(ListItem):
                     style=f"bold {CYAN}" if agent.git_dirty_count == 0 else f"bold {YELLOW}",
                 )
             else:
-                text.append(" " * (self._COL_BRANCH + 1), style="dim")
+                text.append(" " * (self._COL_BRANCH + 1), style=palette.muted)
 
         # Col 10: Sparkline (10 chars)
         if "sparkline" in cols:
-            text.append("  ", style="dim")
+            text.append("  ", style=palette.muted)
             sparkline = self._render_sparkline(agent.activity_history)
             text.append_text(sparkline)
 
@@ -387,30 +476,30 @@ class SessionRow(ListItem):
             if msg_budget > 0:
                 if len(msg) > msg_budget:
                     msg = msg[: max(msg_budget - 1, 0)] + "\u2026"
-                text.append(f"  {msg}", style="dim italic")
+                text.append(f"  {msg}", style=palette.secondary_italic)
 
         if self._action and remaining >= hint_width:
-            text.append("  ", style="dim")
+            text.append("  ", style=palette.muted)
             if self._action.actionable:
                 text.append("[y]", style=f"bold {GREEN}")
-                text.append("[n]", style=f"bold {RED}")
+                text.append("[n]", style=f"bold {palette.danger}")
             else:
                 text.append("[->]", style=f"bold {CYAN}")
 
         # Focused action expansion
         if self._action_focused and self._action and self._action.actionable:
             summary = self._action.summary or ""
-            text.append(f'\n  "{summary}"', style="italic")
+            text.append(f'\n  "{summary}"', style=palette.secondary_italic)
             text.append("\n  >>> ", style=f"bold {GREEN}")
             text.append("[y]", style=f"bold reverse {GREEN}")
-            text.append(" APPROVE  ", style="dim")
-            text.append("[n]", style=f"bold reverse {RED}")
-            text.append(" DENY  ", style="dim")
+            text.append(" APPROVE  ", style=palette.muted)
+            text.append("[n]", style=f"bold reverse {palette.danger}")
+            text.append(" DENY  ", style=palette.muted)
             text.append("[Esc]", style=f"bold {CYAN}")
-            text.append(" cancel", style="dim")
+            text.append(" cancel", style=palette.muted)
 
         # Dim the entire row for unreachable agents (different terminal, not tmux)
-        if self._dim:
+        if self._dim and not selected:
             for i in range(len(text._spans)):
                 text._spans[i] = text._spans[i]._replace(style=f"dim {GREY}")
 
